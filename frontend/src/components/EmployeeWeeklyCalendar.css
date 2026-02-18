@@ -1,0 +1,44 @@
+.employee-weekly-calendar {
+    margin: 20px;
+    background: #fff;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.employee-weekly-calendar h3 {
+    text-align: center;
+    margin-bottom: 10px;
+}
+
+.employee-weekly-calendar table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+
+.employee-weekly-calendar th,
+.employee-weekly-calendar td {
+    border: 1px solid #ddd;
+    padding: 10px;
+    text-align: center;
+    font-family: 'Roboto', sans-serif;
+}
+
+.employee-weekly-calendar th {
+    background: #f0f0f0;
+    font-weight: bold;
+}
+
+.employee-weekly-calendar button {
+    padding: 6px 12px;
+    border: none;
+    background: #333;
+    color: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.employee-weekly-calendar button:hover {
+    background: #555;
+}

@@ -1,0 +1,225 @@
+:root {
+    --primary-color: #1A6CFF;
+    --primary-hover: #1655C3;
+    --secondary-color: #f44336;
+    --font-family: 'Roboto', sans-serif;
+    --background-color: #fff;
+    --page-background: #f8f8f8;
+}
+
+.employee-schedule-list-page {
+    padding: 20px;
+    background: var(--page-background);
+    min-height: 100vh;
+    font-family: var(--font-family);
+    direction: rtl;
+    text-align: right;
+}
+
+/* Title row */
+.header-title-row {
+    text-align: center;
+    margin-bottom: 10px;
+}
+
+.header-title-row h2 {
+    margin: 0;
+    font-size: 2rem;
+    color: #333;
+}
+
+/* Action row */
+.header-actions-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 20px;
+    background-color: var(--background-color);
+    border-bottom: 2px solid #ddd;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Left column */
+.header-actions-row .header-left {
+    text-align: left;
+}
+
+/* Download button styling */
+.download-button {
+    background-color: var(--primary-color);
+    color: #fff;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background-color 0.2s ease;
+}
+
+.download-button:hover {
+    background-color: var(--primary-hover);
+}
+
+/* Center column: week navigation */
+.header-actions-row .header-center {
+    flex: 1;
+    text-align: center;
+}
+
+.week-navigation {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.week-navigation button {
+    background-color: var(--primary-color);
+    color: #fff;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background-color 0.2s ease;
+}
+
+.week-navigation button:hover {
+    background-color: var(--primary-hover);
+}
+
+.week-label {
+    font-size: 1rem;
+    font-weight: bold;
+    color: #333;
+    margin: 0 8px;
+}
+
+/* Right column: status/alert */
+.header-actions-row .header-right {
+    text-align: right;
+}
+
+.header-right .status {
+    font-size: 1rem;
+    font-weight: bold;
+    color: #333;
+    margin-left: 8px;
+}
+
+.not-published-warning {
+    color: red;
+    margin-left: 8px;
+    font-weight: bold;
+}
+
+/* TABLE STYLING */
+table {
+    width: 100%;
+    border-collapse: collapse; /* merges cell borders into single lines */
+    background: var(--background-color);
+    margin-top: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+th, td {
+    text-align: center;
+    vertical-align: middle; /* ensures content is centered vertically */
+    padding: 12px 10px;
+    border: 1px solid #ddd;
+}
+
+th {
+    background: #f0f0f0;
+    font-weight: bold;
+}
+
+/* Even row background for slight zebra effect */
+tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+/* Make the entire cell content center-aligned (vert + horiz) */
+.schedule-cell {
+    /* Using td’s own text-align / vertical-align. */
+}
+
+/* SHIFT CONTAINER - no extra bottom border, just space for multiple shifts */
+.shifts-container {
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+
+    /* Force any nested text to treat itself LTR, so alignment is truly center. */
+    direction: ltr;
+}
+
+/* SHIFT ITEM - no bottom border by default */
+.shift-item {
+    margin: 0 !important;
+    padding: 4px 0 !important;
+    border: none !important;
+    box-sizing: border-box;
+    text-align: center; /* center text inside */
+
+    /* Key changes */
+    display: inline-block;    /* shrink to fit content */
+    margin: 0 auto !important;/* center this box inside .shifts-container */
+    direction: ltr;           /* ensure numeric text is left-to-right */
+}
+
+/* Only show a top border if another shift precedes it */
+.shift-item + .shift-item {
+    border-top: 1px solid #ccc !important;
+    padding-top: 4px !important;
+}
+
+/* Kill possible bottom borders from old rules or pseudo-elements */
+.shift-item:not(:last-child) {
+    border-bottom: none !important;
+}
+.shift-item:after,
+.shift-item:before {
+    content: none !important;
+    display: none !important;
+}
+
+/* If you want the entire cell clickable, you can combine that with .clickable-cell */
+.clickable-cell {
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.clickable-cell:hover {
+    background-color: #e0e0e0;
+}
+
+/* Responsive adjustments */
+@media screen and (max-width: 600px) {
+    .employee-schedule-list-page {
+        padding: 10px;
+    }
+    .header-title-row h2 {
+        font-size: 1.6rem;
+    }
+    .header-actions-row {
+        flex-direction: column;
+        gap: 8px;
+        padding: 8px 10px;
+    }
+    .header-left, .header-center, .header-right {
+        text-align: center;
+    }
+    .week-navigation button, .download-button {
+        padding: 6px 10px;
+        font-size: 0.9rem;
+    }
+    .week-label {
+        font-size: 0.9rem;
+    }
+}

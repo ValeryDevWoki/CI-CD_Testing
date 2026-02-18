@@ -1,0 +1,157 @@
+/* EmployeeSkillsReport.css */
+
+.employee-skills-report-page {
+    direction: rtl;
+    padding: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+    box-sizing: border-box;
+    font-family: Arial, sans-serif;
+}
+
+.report-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.report-header h2 {
+    font-size: 24px;
+    margin: 0;
+    color: #333;
+}
+
+.report-controls {
+    display: flex;
+    align-items: center;
+}
+
+.report-controls label {
+    font-size: 16px;
+    margin-right: 10px;
+    color: #333;
+}
+
+.report-controls input[type="date"] {
+    padding: 5px;
+    font-size: 16px;
+    margin-right: 10px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+}
+
+.report-controls button {
+    padding: 6px 12px;
+    font-size: 16px;
+    cursor: pointer;
+    background-color: #007bff;
+    border: none;
+    color: #fff;
+    border-radius: 3px;
+    transition: background-color 0.3s ease;
+    margin-right: 10px;
+}
+
+.report-controls button:hover {
+    background-color: #0056b3;
+}
+
+.table-wrapper {
+    overflow-x: auto;
+}
+
+.report-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    text-align: center;
+}
+
+.report-table th,
+.report-table td {
+    border: 1px solid #ddd;
+    padding: 10px;
+}
+
+.report-table th {
+    background-color: #f5f5f5;
+    font-weight: bold;
+    color: #333;
+}
+
+.report-table td {
+    color: #555;
+}
+
+@media (max-width: 768px) {
+    .report-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .report-controls {
+        margin-top: 10px;
+        flex-wrap: wrap;
+    }
+
+    .report-controls label,
+    .report-controls input[type="date"],
+    .report-controls button {
+        font-size: 14px;
+    }
+}
+/* Add these styles to EmployeeSkillsReport.css (or wherever suits your project) */
+
+.download-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 999;
+}
+
+.download-modal {
+    background: #fff;
+    padding: 20px;
+    border-radius: 5px;
+    max-width: 420px;
+    width: 90%;
+    text-align: right; /* for RTL */
+}
+
+.download-modal h3 {
+    margin-top: 0;
+    margin-bottom: 10px;
+}
+
+.option-group {
+    margin: 10px 0;
+}
+
+.skills-selection {
+    margin-top: 10px;
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #ccc;
+    padding: 5px;
+}
+
+.skills-checkbox-list label {
+    display: block;
+    margin: 3px 0;
+}
+
+.modal-buttons {
+    margin-top: 15px;
+    text-align: center;
+}
+
+.modal-buttons .action-button {
+    margin: 0 8px;
+}

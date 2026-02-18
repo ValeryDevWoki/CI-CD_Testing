@@ -1,0 +1,27 @@
+/* src/components/ArrivalModificationModal.css */
+
+.arrival-modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.arrival-modal-content {
+    background: #fff;
+    padding: 20px;
+    border-radius: 6px;
+    min-width: 300px;
+}
+
+.modal-buttons {
+    margin-top: 15px;
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}

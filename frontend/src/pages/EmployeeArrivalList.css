@@ -1,0 +1,58 @@
+/* src/pages/EmployeeArrivalList.css */
+
+.employee-arrival-list-page {
+    padding: 20px;
+    background: #f8f8f8;
+    min-height: 100vh;
+    font-family: 'Roboto', sans-serif;
+}
+
+.header-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.header-section h2 {
+    margin: 0;
+}
+
+.week-navigation {
+    display: flex;
+    gap: 10px;
+}
+
+.arrival-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.arrival-table th,
+.arrival-table td {
+    padding: 12px 10px;
+    border: 1px solid #ddd;
+    text-align: center;
+}
+
+.arrival-table th {
+    background: #f0f0f0;
+    font-weight: bold;
+}
+
+tr:nth-child(even) {
+    background: #f9f9f9;
+}
+
+.arrival-cell {
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.arrival-cell:hover {
+    background-color: #e0e0e0;
+}

@@ -1,0 +1,152 @@
+/* src/components/EditableWeeklyScheduleTable.css */
+:root {
+    --primary-color: #1a6cff;
+    --secondary-color: #f44336;
+    --font-family: 'Arial', sans-serif;
+    --background-color: #fff;
+}
+
+.editable-weekly-schedule-table {
+    padding: 20px;
+    background: var(--background-color);
+    margin: 20px auto;
+    border-radius: 8px;
+    max-width: 100%;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    direction: rtl;
+    text-align: center;
+    font-family: var(--font-family);
+}
+
+/* Header row for title and lock controls */
+.header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.schedule-title {
+    margin: 0;
+    font-size: 1.4rem;
+    color: #333;
+}
+
+/* Lock controls styling */
+.lock-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.lock-button,
+.send-button {
+    background-color: var(--primary-color);
+    color: #fff;
+    border: none;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+.lock-button:hover,
+.send-button:hover {
+    background-color: #1655c3;
+}
+
+.lock-date {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.lock-date input {
+    padding: 4px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+/* Table styling */
+.editable-weekly-schedule-table table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+.editable-weekly-schedule-table th,
+.editable-weekly-schedule-table td {
+    border: 1px solid #ddd;
+    padding: 8px;
+}
+.editable-weekly-schedule-table th {
+    background-color: #f4f4f4;
+    font-weight: 500;
+}
+.editable-weekly-schedule-table tr:nth-child(even) {
+    background-color: #fafafa;
+}
+.editable-weekly-schedule-table tr:hover {
+    background-color: #f1f1f1;
+}
+.table-input {
+    width: 60px;
+    text-align: center;
+    padding: 4px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+.clickable-cell {
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+.under-assigned {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+.exact-assigned {
+    background-color: #d4edda;
+    color: #155724;
+}
+.over-assigned {
+    background-color: #fff3cd;
+    color: #856404;
+}
+.total-row td {
+    font-weight: bold;
+    background-color: #e2e2e2;
+}
+
+/* Responsive adjustments */
+@media screen and (max-width: 600px) {
+    .editable-weekly-schedule-table {
+        padding: 10px;
+    }
+    .editable-weekly-schedule-table th,
+    .editable-weekly-schedule-table td {
+        padding: 6px;
+        font-size: 14px;
+    }
+    .table-input {
+        width: 50px;
+        font-size: 14px;
+    }
+}
+
+/* שכל הכפתורים יראו אחיד */
+.lock-button,
+.send-button,
+.download-button {
+    background-color: var(--primary-color);
+    color: #fff;
+    border: none;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+
+.lock-button:hover,
+.send-button:hover,
+.download-button:hover {
+    background-color: #1655c3;
+}

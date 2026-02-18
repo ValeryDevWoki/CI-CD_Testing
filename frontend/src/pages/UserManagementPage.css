@@ -1,0 +1,296 @@
+/* src/UserManagementPage.css */
+:root {
+    --primary-color: #1A6CFF;
+    --primary-hover: #1655C3;
+    --secondary-color: #f44336;
+    --font-family: 'Roboto', sans-serif;
+    --background-color: #fff;
+    --page-background: #f8f8f8;
+}
+
+.user-management-page {
+    padding: 20px;
+    font-family: var(--font-family);
+    background: var(--page-background);
+    direction: rtl;
+    text-align: right;
+}
+
+/* Page Title */
+.user-management-page h2 {
+    text-align: center;
+    margin-bottom: 20px;
+    color: #333;
+    font-size: 2rem;
+}
+
+/* Tab Navigation (unchanged) */
+.tabs {
+    display: flex;
+    margin-bottom: 20px;
+    gap: 10px;
+    justify-content: center;
+}
+
+.tabs button {
+    flex: 1;
+    padding: 10px;
+    cursor: pointer;
+    background: #f4f4f4;
+    border: 1px solid #ccc;
+    border-bottom: none;
+    outline: none;
+    transition: background 0.2s ease;
+}
+
+.tabs button:hover {
+    background: #e0e0e0;
+}
+
+.tabs button.active {
+    background: #fff;
+    font-weight: bold;
+    border-bottom: 1px solid #fff;
+}
+
+/* Default Action Button (Blue for Page-Level Buttons) */
+.action-button {
+    margin: 0 5px;
+    padding: 8px 16px;
+    background-color: var(--primary-color);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.action-button:hover {
+    background-color: var(--primary-hover);
+}
+
+/* User Table Styling */
+.user-table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    margin-top: 20px;
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.user-table th,
+.user-table td {
+    border: 1px solid #ddd;
+    padding: 10px;
+    text-align: center;
+    font-family: var(--font-family);
+}
+
+.user-table th {
+    background: #f4f4f4;
+}
+
+.user-table tr:nth-child(even) {
+    background: #fafafa;
+}
+
+.user-table input,
+.user-table select {
+    width: 100%;
+    padding: 6px;
+    box-sizing: border-box;
+}
+
+/* Override Action Buttons inside Table Rows – Green */
+.user-table .action-button,
+.limits-table .action-button,
+.roles-table .action-button,
+.skills-table .action-button {
+    padding: 5px 10px;
+    background-color: #555;  /* Green */
+}
+
+.user-table .action-button:hover,
+.limits-table .action-button:hover,
+.roles-table .action-button:hover,
+.skills-table .action-button:hover {
+    background-color: #777;  /* Darker green on hover */
+}
+
+/* Groups Edit Mode */
+.groups-edit-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    height: 100%;
+}
+
+.group-search-bar {
+    position: relative;
+}
+
+.group-search-bar input {
+    width: 100%;
+}
+
+.group-suggestions {
+    position: absolute;
+    top: 36px;
+    left: 0;
+    right: 0;
+    background: #fff;
+    border: 1px solid #ccc;
+    max-height: 150px;
+    overflow-y: auto;
+    z-index: 10;
+}
+
+.suggestion {
+    padding: 6px;
+    cursor: pointer;
+}
+
+.suggestion:hover {
+    background: #eee;
+}
+
+.no-match {
+    padding: 6px;
+    color: #999;
+}
+
+/* Selected Groups Grid */
+.selected-groups-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 8px;
+    max-height: 250px;
+    overflow-y: auto;
+    width: 100%;
+    border: 1px solid #ddd;
+    padding: 8px;
+    border-radius: 4px;
+    background: #fafafa;
+}
+
+.group-tag {
+    background: #e2e2e2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.remove-group-btn {
+    background: transparent;
+    border: none;
+    color: #333;
+    cursor: pointer;
+    font-weight: bold;
+    margin-left: 8px;
+}
+
+/* Read-Only Groups Mode */
+.readonly-groups-scroll {
+    display: inline-flex;
+    width: 100%;
+    box-sizing: border-box;
+    gap: 8px;
+    overflow-x: auto;
+    white-space: nowrap;
+    margin: 0;
+    padding: 4px;
+    background: #fafafa;
+    border-radius: 4px;
+    border: 1px solid #eee;
+}
+
+.readonly-group-tag {
+    background: #eee;
+    padding: 4px 8px;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Responsive adjustments */
+@media screen and (max-width: 600px) {
+    .user-management-page {
+        padding: 10px;
+    }
+    .tabs button {
+        padding: 8px;
+        font-size: 0.9rem;
+    }
+    .user-table th,
+    .user-table td {
+        padding: 8px;
+        font-size: 0.9rem;
+    }
+}
+/* toggle above the users table */
+.toggle-container {
+    margin: 16px 0;
+}
+.toggle-container label {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+.toggle-container input[type="checkbox"] {
+    margin-left: 8px;
+    transform: scale(1.1);
+}
+
+/* ————————————————————————————
+   Row of “create” button, checkbox & search
+   ———————————————————————————— */
+.controls-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;          /* space between items */
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+/* style the “hide inactive” label+checkbox */
+.hide-inactive-label {
+    display: flex;
+    align-items: center;
+    font-size: 0.9rem;
+}
+.hide-inactive-label input[type="checkbox"] {
+    margin-left: 8px;
+    transform: scale(1.1);
+}
+
+/* the search bar itself */
+.search-input {
+    flex: 1;            /* grow to fill remaining */
+    max-width: 250px;   /* optional cap */
+    padding: 6px 8px;
+    font-size: 0.9rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+/* Limit email cell width and enable ellipsis */
+.user-table .email-cell {
+    max-width: 160px;          /* Adjust as needed */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    direction: ltr;            /* For left-to-right emails in RTL table */
+    text-align: left;
+    vertical-align: middle;
+}
+.user-table .email-cell span {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

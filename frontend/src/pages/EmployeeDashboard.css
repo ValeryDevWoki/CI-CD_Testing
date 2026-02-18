@@ -1,0 +1,315 @@
+/* src/pages/EmployeeDashboard.css */
+
+/* Root variables */
+:root {
+    --primary-color: #1a6cff;
+    --secondary-color: #f44336;
+    --font-family: 'Arial', sans-serif;
+    --background-color: #fff;
+    --border-color: #ddd;
+    --text-color: #333;
+}
+
+/* Global styles */
+.employee-dashboard {
+    direction: rtl;
+    text-align: right;
+    font-family: var(--font-family);
+    background-color: var(--background-color);
+    color: var(--text-color);
+    margin: 10px;
+    padding: 0;
+    max-width: 100%;
+}
+
+h1 {
+    font-size: 1.6rem;
+    margin-bottom: 1rem;
+}
+
+/* Section styling */
+.draft-section, .published-section {
+    background-color: #fafafa;
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Week navigation */
+.week-navigation {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.week-label {
+    font-weight: bold;
+    text-align: center;
+    font-size: 0.9rem;
+}
+
+.week-navigation button {
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+.week-navigation button:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+}
+
+/* Table styling (desktop remains unchanged) */
+.table-container {
+    margin-bottom: 15px;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.schedule-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 10px;
+}
+
+.schedule-table th,
+.schedule-table td {
+    border: 1px solid var(--border-color);
+    padding: 10px 8px;
+    text-align: right;
+}
+
+.schedule-table th {
+    background-color: var(--primary-color);
+    color: white;
+    font-weight: bold;
+    font-size: 0.9rem;
+}
+
+.schedule-table tr:nth-child(even) {
+    background-color: #f2f2f2;
+}
+
+/* Time inputs */
+.time-inputs {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    direction: ltr;
+}
+
+.time-input {
+    width: 65px;
+    padding: 6px 4px;
+    text-align: center;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+.time-separator {
+    margin: 0 5px;
+}
+
+input[type="text"] {
+    padding: 6px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.note-readonly {
+    background-color: #f1f1f1;
+}
+
+/* Banners */
+.error-banner, .locked-banner {
+    background-color: var(--secondary-color);
+    color: white;
+    padding: 10px;
+    margin: 10px 0;
+    border-radius: 4px;
+    text-align: center;
+    font-size: 0.9rem;
+}
+
+.success-banner {
+    background-color: #4CAF50;
+    color: white;
+    padding: 10px;
+    margin: 10px 0;
+    border-radius: 4px;
+    text-align: center;
+    font-size: 0.9rem;
+}
+
+/* Send Manager button */
+.send-manager {
+    display: flex;
+    justify-content: center;
+    margin-top: 15px;
+}
+
+.send-manager button {
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    cursor: pointer;
+    border-radius: 4px;
+    font-weight: bold;
+    font-size: 0.95rem;
+}
+
+.send-manager button:hover {
+    background-color: #1655c3;
+}
+
+/* Mobile-specific styles */
+@media screen and (max-width: 768px) {
+    .employee-dashboard {
+        margin: 0;
+        padding: 10px;
+    }
+    h1 {
+        font-size: 1.2rem;
+        margin: 10px 0;
+        text-align: center;
+    }
+
+    /* Transform registration (draft) table rows into three-row cards:
+       - Row 1: Day, Date, Status
+       - Row 2: Time inputs (with a "התחלה - סיום" label)
+       - Row 3: Note field */
+    .draft-section .schedule-table {
+        border: none;
+    }
+    .draft-section .schedule-table thead {
+        display: none;
+    }
+    .draft-section .schedule-table tr {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        grid-template-rows: auto auto auto;
+        grid-template-areas:
+          "day date status"
+          "time time time"
+          "note note note";
+        gap: 8px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        padding: 10px;
+        margin-bottom: 15px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    }
+    /* Assign grid areas based on cell order */
+    .draft-section .schedule-table tr td:nth-child(1) {
+        grid-area: day;
+    }
+    .draft-section .schedule-table tr td:nth-child(2) {
+        grid-area: date;
+    }
+    .draft-section .schedule-table tr td:nth-child(3) {
+        grid-area: time;
+        position: relative;
+    }
+    .draft-section .schedule-table tr td:nth-child(4) {
+        grid-area: note;
+    }
+    .draft-section .schedule-table tr td:nth-child(5) {
+        grid-area: status;
+    }
+    /* Add a label to the time cell */
+    .draft-section .schedule-table tr td:nth-child(3)::before {
+        content: "סיום - התחלה";
+        display: block;
+        font-size: 0.8rem;
+        color: #555;
+        margin-bottom: 4px;
+    }
+
+    /* Transform published schedule table rows into compact two-row cards:
+       - Row 1: Day and Date
+       - Row 2: Shift times */
+    .published-section .schedule-table {
+        border: none;
+    }
+    .published-section .schedule-table thead {
+        display: none;
+    }
+    .published-section .schedule-table tr {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: auto auto;
+        grid-template-areas:
+          "day date"
+          "shift shift";
+        gap: 5px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        padding: 8px;
+        margin-bottom: 10px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    }
+    .published-section .schedule-table tr td {
+        border: none;
+        padding: 4px;
+        font-size: 0.85rem;
+    }
+    .published-section .schedule-table tr td:nth-child(1) {
+        grid-area: day;
+    }
+    .published-section .schedule-table tr td:nth-child(2) {
+        grid-area: date;
+        text-align: left;
+    }
+    .published-section .schedule-table tr td:nth-child(3) {
+        grid-area: shift;
+    }
+
+    /* Week navigation adjustments */
+    .week-navigation {
+        padding: 0 5px;
+        margin-bottom: 10px;
+    }
+    .week-label {
+        font-size: 0.8rem;
+    }
+    .week-navigation button {
+        padding: 6px 8px;
+        font-size: 0.75rem;
+    }
+
+    /* Touch-friendly input fields */
+    input[type="text"] {
+        padding: 8px;
+        font-size: 0.9rem;
+    }
+
+    /* Banner adjustments */
+    .error-banner, .success-banner, .locked-banner {
+        padding: 8px;
+        font-size: 0.8rem;
+        margin: 8px 0;
+    }
+}
+
+/* Additional adjustments for very small screens */
+@media screen and (max-width: 480px) {
+    .draft-section .schedule-table tr {
+        gap: 5px;
+        padding: 8px;
+    }
+    .published-section .schedule-table tr {
+        gap: 4px;
+        padding: 6px;
+    }
+}

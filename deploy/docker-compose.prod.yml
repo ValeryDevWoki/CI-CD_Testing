@@ -1,0 +1,39 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: yardena_db
+    environment:
+      POSTGRES_USER: yardena
+      POSTGRES_PASSWORD: yardena_pass
+      POSTGRES_DB: yardena_test
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yardena -d yardena_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: ../backend
+    container_name: yardena_backend
+    env_file:
+      - backend.env
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3001:3001"
+
+  frontend:
+    build:
+      context: ../frontend
+    container_name: yardena_frontend
+    depends_on:
+      - backend
+    ports:
+      - "3003:80"
+
+volumes:
+  pgdata:
