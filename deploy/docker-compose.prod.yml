@@ -1,18 +1,22 @@
+name: yardena
+
 services:
   db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     container_name: yardena_db
     environment:
-      POSTGRES_USER: yardena
-      POSTGRES_PASSWORD: yardena_pass
-      POSTGRES_DB: yardena_test
+      POSTGRES_USER: ${POSTGRES_USER:-yardena}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-yardena_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-yardena_test}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U yardena -d yardena_test"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
-      retries: 20
+      retries: 30
+    restart: unless-stopped
+    networks: [yardena_net]
 
   backend:
     build:
@@ -23,8 +27,11 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # Expose only to localhost (Virtualmin reverse-proxy does not need backend directly)
     ports:
-      - "3001:3001"
+      - "127.0.0.1:3001:3001"
+    restart: unless-stopped
+    networks: [yardena_net]
 
   frontend:
     build:
@@ -33,7 +40,13 @@ services:
     depends_on:
       - backend
     ports:
-      - "3003:80"
+      - "127.0.0.1:3003:80"
+    restart: unless-stopped
+    networks: [yardena_net]
 
 volumes:
   pgdata:
+
+networks:
+  yardena_net:
+    driver: bridge

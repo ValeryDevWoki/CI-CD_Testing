@@ -1,64 +1,103 @@
-# Yardena (test CI/CD + Docker) — инструкция
+# Yardena (prod/test) — Docker + CI/CD + Virtualmin reverse proxy
 
-Цель: поднять тестовую среду для `linuxtest3.woki.co.il`:
-- Frontend (React) в контейнере (порт хоста `3003`)
-- Backend (Node/Express) в контейнере (порт хоста `3001`)
-- Postgres в контейнере + volume
-- Virtualmin/Nginx проксирует домен на `http://127.0.0.1:3003`
-- CI/CD: push в `main` → сервер делает `git pull` + `docker compose up -d --build`
+Цель: поднять `linuxtest3.woki.co.il` на Ubuntu 24.04 так, чтобы:
+- **Virtualmin/Nginx** принимает домен (80/443) и проксирует на **локальный** порт `127.0.0.1:3003`
+- В Docker Compose крутятся:
+  - `frontend` (Nginx + статик React) — слушает **внутри** контейнера 80, на хосте **только** `127.0.0.1:3003`
+  - `backend` (Node/Express) — на хосте **только** `127.0.0.1:3001`
+  - `db` (Postgres) — **без** публикации порта на хост
+- CI/CD: `push` в `main` → GitHub Actions → SSH на сервер → `docker compose up -d --build`
 
-## 0) Структура
-- `backend/` — Node backend
-- `frontend/` — React frontend (CRA)
-- `deploy/` — docker-compose + env + restore script
-- `.github/workflows/deploy.yml` — GitHub Actions deploy
+---
 
-## 1) Локально: создать GitHub репозиторий и залить код
-1. GitHub → New repository (Private)
-2. Распакуй архив проекта
-3. В папке проекта:
-   ```bash
-   git init
-   git add .
-   git commit -m "init: docker + cicd"
-   git branch -M main
-   git remote add origin <REPO_URL>
-   git push -u origin main
-   ```
+## Архитектура
 
-## 2) На сервере: подготовка папок
+Интернет → Cloudflare → **Virtualmin Nginx** → `http://127.0.0.1:3003` → контейнер `frontend`  
+`frontend` (Nginx) проксирует `/api/*` → контейнер `backend:3001` → контейнер `db:5432`
+
+Почему так:
+- наружу открыт только Nginx Virtualmin (80/443)
+- контейнеры доступны с хоста только через `127.0.0.1`
+- БД вообще не торчит наружу
+
+---
+
+## 1) Что положить в GitHub
+
+Коммитим всё **кроме секретов**. В репо должны быть:
+- `backend/Dockerfile`
+- `frontend/Dockerfile`
+- `deploy/docker-compose.prod.yml`
+- `deploy/backend.env.example`
+- `deploy/restore_dump.sh`
+- `.github/workflows/deploy.yml`
+- `.gitignore`
+
+> Важно: реальные `.env` (с паролями/токенами) **не коммитить**.
+
+---
+
+## 2) Что сделать на сервере (один раз)
+
+### 2.1 Папки
 ```bash
 sudo mkdir -p /opt/apps/yardena
-sudo chown -R woki1:woki1 /opt/apps
+sudo chown -R $USER:$USER /opt/apps/yardena
+
 sudo mkdir -p /srv/backups/dumps
-sudo chown -R woki1:woki1 /srv/backups
+sudo chown -R $USER:$USER /srv/backups
 ```
 
-## 3) На сервере: клонирование проекта
+### 2.2 Docker / Compose
+Убедись что:
 ```bash
+docker version
+docker compose version
+```
+и пользователь в группе `docker`:
+```bash
+groups | grep docker || sudo usermod -aG docker $USER
+```
+(после этого перелогинься в ssh)
+
+### 2.3 Клонирование
+```bash
+git clone git@github.com:<OWNER>/<REPO>.git /opt/apps/yardena
 cd /opt/apps/yardena
-git clone <REPO_URL> .
 ```
 
-## 4) На сервере: создать `deploy/backend.env`
+### 2.4 Runtime env для backend (НА СЕРВЕРЕ)
 ```bash
 cd /opt/apps/yardena/deploy
 cp backend.env.example backend.env
 nano backend.env
 ```
-Минимум поменяй:
-- `FRONTEND_URL=https://linuxtest3.woki.co.il`
-- `SESSION_SECRET=...` (длинная случайная строка)
 
-## 5) Восстановить дамп в Postgres контейнер (тест)
-Дамп уже у тебя лежит в `/srv/backups/dumps/*.dump`.
+---
 
+## 3) Postgres в Docker и восстановление dump
+
+1) Убедись, что dump лежит тут:
+`/srv/backups/dumps/backup_20260112_151239.dump`
+
+2) Подними только БД:
 ```bash
 cd /opt/apps/yardena/deploy
+docker compose -f docker-compose.prod.yml up -d db
+```
+
+3) Восстанови dump:
+```bash
 ./restore_dump.sh docker-compose.prod.yml /srv/backups/dumps/backup_20260112_151239.dump
 ```
 
-## 6) Поднять контейнеры
+Если увидишь `pg_restore: unsupported version ...`:
+- значит dump сделан **более новым** `pg_dump`, чем версия Postgres в контейнере.
+- Решение: поднять версию `postgres:<X>` в `docker-compose.prod.yml` до той же или новее.
+
+---
+
+## 4) Поднять всё приложение
 ```bash
 cd /opt/apps/yardena/deploy
 docker compose -f docker-compose.prod.yml up -d --build
@@ -67,56 +106,35 @@ docker compose -f docker-compose.prod.yml ps
 
 Проверка:
 ```bash
-curl -I http://127.0.0.1:3003
+curl -I http://127.0.0.1:3003/
+curl -I http://127.0.0.1:3003/api/health || true
 ```
 
-## 7) Virtualmin / Nginx: проксировать домен на контейнер
-В Virtualmin:
-- Выбери `linuxtest3.woki.co.il`
-- Web Configuration → (Nginx) Edit Nginx directives / Configure Nginx website
-- Добавь внутри `server { ... }`:
+---
 
-```nginx
-location / {
-  proxy_pass http://127.0.0.1:3003;
-  proxy_set_header Host $host;
-  proxy_set_header X-Real-IP $remote_addr;
-  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-  proxy_set_header X-Forwarded-Proto $scheme;
-}
-```
+## 5) Virtualmin / Nginx reverse proxy
 
-Сохрани и нажми Apply Changes / Reload Nginx.
+В Virtualmin для домена `linuxtest3.woki.co.il`:
 
-## 8) Включить CI/CD (GitHub Actions → SSH)
-### 8.1 Сгенерировать ключ для GitHub Actions (на ПК)
-PowerShell:
-```powershell
-ssh-keygen -t ed25519 -C "github-actions-yardena" -f $env:USERPROFILE\.ssh\yardena_github_actions -N ""
-```
+**Вариант A (проще):** Nginx proxy pass на порт фронта  
+- Nginx website enabled
+- Добавь прокси на `/` → `http://127.0.0.1:3003`
 
-### 8.2 Добавить public key на сервер
-На сервере:
-```bash
-mkdir -p ~/.ssh
-nano ~/.ssh/authorized_keys
-```
-Вставь содержимое `yardena_github_actions.pub`.
+**Важно:** порт указываем **локальный** `127.0.0.1`, не публичный IP.
 
-Права:
-```bash
-chmod 700 ~/.ssh
-chmod 600 ~/.ssh/authorized_keys
-```
+---
 
-### 8.3 Добавить Secrets в GitHub
-Repo → Settings → Secrets and variables → Actions → New repository secret:
+## 6) CI/CD (GitHub Actions)
+
+### 6.1 Secrets в GitHub
+В репозитории: **Settings → Secrets and variables → Actions → New repository secret**
 - `SSH_HOST` = `185.60.170.48`
-- `SSH_USER` = `woki1`
-- `SSH_KEY` = содержимое приватного ключа `yardena_github_actions` (не .pub)
+- `SSH_USER` = твой юзер на сервере (например `woki1`)
+- `SSH_KEY` = приватный ключ (deploy key или ключ пользователя)
+- (опционально) `SSH_PORT` = `22`
 
-После этого: любой `git push` в `main` будет деплоить.
+Важно для приватного репо:
+- добавь **deploy key** (public key) в GitHub repo → Settings → Deploy keys → **Allow read access**.
 
-## Примечание про Cloudflare
-SSH по `admin.woki.co.il` у тебя не работает, потому что домен проксируется Cloudflare.
-Для scp/ssh используй прямой IP сервера: `185.60.170.48`.
+После этого: `push` в `main` → деплой.
+

@@ -2,7 +2,7 @@ name: Deploy to server (Docker Compose)
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
 
 jobs:
   deploy:
@@ -14,24 +14,36 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script_stop: true
           script: |
-            set -e
+            set -euo pipefail
+
             APP_DIR="/opt/apps/yardena"
+            REPO_SSH="git@github.com:${{ github.repository }}.git"
+
+            # First deploy: clone
             if [ ! -d "$APP_DIR/.git" ]; then
               sudo mkdir -p "$APP_DIR"
-              sudo chown -R $USER:$USER "$APP_DIR"
-              git clone "${{ github.server_url }}/${{ github.repository }}.git" "$APP_DIR"
+              sudo chown -R "$USER:$USER" "$APP_DIR"
+              git clone "$REPO_SSH" "$APP_DIR"
             fi
+
             cd "$APP_DIR"
             git fetch --all
             git reset --hard origin/main
 
             cd deploy
-            # backend.env must exist on server (not in git)
+
+            # backend.env must exist on server (NOT in git)
             if [ ! -f backend.env ]; then
               echo "Missing deploy/backend.env on server. Create it from backend.env.example" >&2
               exit 1
             fi
+
+            # Ensure docker is available
+            docker version
+            docker compose version
 
             docker compose -f docker-compose.prod.yml up -d --build
             docker image prune -f

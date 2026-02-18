@@ -1,8 +1,16 @@
 FROM node:20-alpine
+
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci --omit=dev || npm install --omit=dev
+
+# Install dependencies (works with/without lockfile)
+COPY package.json ./
+COPY package-lock.json ./
+RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit=dev; fi
+
+# Copy source
 COPY . .
+
 ENV NODE_ENV=production
 EXPOSE 3001
-CMD ["npm","start"]
+
+CMD ["node","server.js"]
