@@ -1,4 +1,4 @@
-name: Deploy (Yardena)
+name: Deploy to server (Docker Compose)
 
 on:
   push:
@@ -7,7 +7,6 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -21,7 +20,7 @@ jobs:
             set -euo pipefail
 
             APP_DIR="/opt/apps/yardena"
-            REPO_SSH="git@github.com:${GITHUB_REPOSITORY}.git"
+            REPO_SSH="git@github.com:ValeryDevWoki/CI-CD_Testing.git"
 
             # First deploy: clone if missing
             if [ ! -d "$APP_DIR/.git" ]; then
@@ -45,27 +44,19 @@ jobs:
             docker version
             docker compose version
 
-            # Stop current stack (does NOT remove volumes)
-            docker compose -p yardena -f docker-compose.prod.yml down
-
-            # Free ports from leftovers (other stacks/manual runs)
-            docker ps --format '{{.ID}} {{.Ports}} {{.Names}}' \
-              | grep -E '127\.0\.0\.1:3001->|0\.0\.0\.0:3001->' \
-              | awk '{print $1}' \
-              | xargs -r docker rm -f || true
-
-            docker ps --format '{{.ID}} {{.Ports}} {{.Names}}' \
-              | grep -E '127\.0\.0\.1:3003->|0\.0\.0\.0:3003->' \
-              | awk '{print $1}' \
-              | xargs -r docker rm -f || true
-
-            # Start stack
+            # Clean restart (does NOT remove volumes)
+            docker compose -p yardena -f docker-compose.prod.yml down || true
             docker compose -p yardena -f docker-compose.prod.yml up -d --build --remove-orphans
 
-            # Quick sanity check: frontend responds locally
+            # Sanity checks
             curl -fsS http://127.0.0.1:3003/ >/dev/null
 
-            # Optional cleanup
-            docker image prune -f
+            # API should respond (401 is OK when not logged in)
+            code="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3003/api/users || true)"
+            if [ "$code" != "200" ] && [ "$code" != "401" ] && [ "$code" != "403" ]; then
+              echo "Unexpected API status code: $code"
+              exit 1
+            fi
 
+            docker compose -p yardena -f docker-compose.prod.yml ps
             echo "✅ Deploy done"
