@@ -68,7 +68,7 @@ export default function Login({ setUserRole, setIsAuthenticated, setUser }) {
         }
         setIsLoading(true);
         try {
-            const res = await fetch(`${API_BASE}/api/login/google`, {
+            const res = await fetch(`${API_BASE}/login/google`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
