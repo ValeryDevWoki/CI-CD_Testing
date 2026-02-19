@@ -1,4 +1,4 @@
-name: Deploy to server (Docker Compose)
+name: Deploy (Yardena)
 
 on:
   push:
@@ -7,8 +7,9 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
-      - name: yardena
+      - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -20,9 +21,9 @@ jobs:
             set -euo pipefail
 
             APP_DIR="/opt/apps/yardena"
-            REPO_SSH="git@github.com:${{ github.repository }}.git"
+            REPO_SSH="git@github.com:${GITHUB_REPOSITORY}.git"
 
-            # First deploy: clone
+            # First deploy: clone if missing
             if [ ! -d "$APP_DIR/.git" ]; then
               sudo mkdir -p "$APP_DIR"
               sudo chown -R "$USER:$USER" "$APP_DIR"
@@ -41,11 +42,30 @@ jobs:
               exit 1
             fi
 
-            # Ensure docker is available
             docker version
             docker compose version
-            
-            
+
+            # Stop current stack (does NOT remove volumes)
             docker compose -p yardena -f docker-compose.prod.yml down
+
+            # Free ports from leftovers (other stacks/manual runs)
+            docker ps --format '{{.ID}} {{.Ports}} {{.Names}}' \
+              | grep -E '127\.0\.0\.1:3001->|0\.0\.0\.0:3001->' \
+              | awk '{print $1}' \
+              | xargs -r docker rm -f || true
+
+            docker ps --format '{{.ID}} {{.Ports}} {{.Names}}' \
+              | grep -E '127\.0\.0\.1:3003->|0\.0\.0\.0:3003->' \
+              | awk '{print $1}' \
+              | xargs -r docker rm -f || true
+
+            # Start stack
             docker compose -p yardena -f docker-compose.prod.yml up -d --build --remove-orphans
+
+            # Quick sanity check: frontend responds locally
+            curl -fsS http://127.0.0.1:3003/ >/dev/null
+
+            # Optional cleanup
             docker image prune -f
+
+            echo "✅ Deploy done"
