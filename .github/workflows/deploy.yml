@@ -44,6 +44,8 @@ jobs:
             # Ensure docker is available
             docker version
             docker compose version
-
+            
+            
+            docker compose -p yardena -f docker-compose.prod.yml down
             docker compose -p yardena -f docker-compose.prod.yml up -d --build --remove-orphans
             docker image prune -f
