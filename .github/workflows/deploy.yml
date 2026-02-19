@@ -7,6 +7,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -48,13 +49,26 @@ jobs:
             docker compose -p yardena -f docker-compose.prod.yml down || true
             docker compose -p yardena -f docker-compose.prod.yml up -d --build --remove-orphans
 
-            # Sanity checks
+            # Wait for frontend to respond (max ~60s)
+            for i in $(seq 1 30); do
+              if curl -fsS http://127.0.0.1:3003/ >/dev/null; then
+                echo "Frontend is up"
+                break
+              fi
+              echo "Waiting for frontend... ($i/30)"
+              sleep 2
+            done
+
+            # Final check: frontend must respond
             curl -fsS http://127.0.0.1:3003/ >/dev/null
 
-            # API should respond (401 is OK when not logged in)
+            # API should respond (401/403 ok when not logged in)
             code="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3003/api/users || true)"
             if [ "$code" != "200" ] && [ "$code" != "401" ] && [ "$code" != "403" ]; then
               echo "Unexpected API status code: $code"
+              docker compose -p yardena -f docker-compose.prod.yml ps || true
+              docker compose -p yardena -f docker-compose.prod.yml logs --tail=80 frontend || true
+              docker compose -p yardena -f docker-compose.prod.yml logs --tail=80 backend || true
               exit 1
             fi
 
