@@ -7,34 +7,98 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 20
 
+      # --------------------
+      # Backend
+      # --------------------
       - name: Backend install
         working-directory: backend
         run: npm ci
+
       - name: Backend lint
         working-directory: backend
         run: npm run lint --if-present
+
       - name: Backend test
         working-directory: backend
         run: npm test --if-present
+
       - name: Backend build
         working-directory: backend
         run: npm run build --if-present
 
-      - name: Frontend install
+      # --------------------
+      # Debug: show what files exist in repo (helps detect extra lockfiles)
+      # --------------------
+      - name: Debug repo root (lockfiles + typescript mentions)
+        run: |
+          echo "=== ROOT PWD ==="
+          pwd
+          echo "=== LIST ROOT ==="
+          ls -la
+          echo "=== FIND package.json / package-lock.json (maxdepth 4) ==="
+          find . -maxdepth 4 \( -name "package.json" -o -name "package-lock.json" \) -print
+          echo "=== GREP typescript in package.json files (maxdepth 4) ==="
+          find . -maxdepth 4 -name "package.json" -print -exec sh -c 'echo "---- {} ----"; grep -n "typescript" "{}" || true' \;
+
+      # --------------------
+      # Frontend (DEBUG + INSTALL)
+      # --------------------
+      - name: Frontend debug + install
         working-directory: frontend
-        run: npm ci
+        run: |
+          echo "=== FRONTEND PWD ==="
+          echo "PWD=$(pwd)"
+          echo "NODE=$(node -v)"
+          echo "NPM=$(npm -v)"
+
+          echo "=== FRONTEND package.json (first 200 lines) ==="
+          sed -n '1,200p' package.json
+
+          echo "=== FRONTEND package-lock.json header (first 80 lines) ==="
+          sed -n '1,80p' package-lock.json || true
+
+          echo "=== FRONTEND: ALL lines containing 'typescript' (with line numbers) ==="
+          nl -ba package-lock.json | grep -i "typescript" || true
+
+          echo "=== FRONTEND: packages[''] section (root package) ==="
+          node - <<'NODE'
+          const l = require('./package-lock.json');
+          const root = l.packages && l.packages[""];
+          console.log(root ? JSON.stringify(root, null, 2) : "NO packages[''] found (older lockfile format?)");
+          NODE
+
+          echo "=== FRONTEND: dependencies.typescript section (if present) ==="
+          node - <<'NODE'
+          const l = require('./package-lock.json');
+          console.log(l.dependencies && l.dependencies.typescript
+            ? JSON.stringify(l.dependencies.typescript, null, 2)
+            : "NO dependencies.typescript found");
+          NODE
+
+          echo "=== NOW RUN npm ci (frontend) ==="
+          npm ci
+
       - name: Frontend lint
+        if: always()
         working-directory: frontend
         run: npm run lint --if-present
+
       - name: Frontend test
+        if: always()
         working-directory: frontend
         run: npm test --if-present
+
       - name: Frontend build
+        if: always()
         working-directory: frontend
         run: npm run build --if-present
