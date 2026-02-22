@@ -7,34 +7,88 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
 
+      # --------------------
+      # Backend
+      # --------------------
       - name: Backend install
         working-directory: backend
         run: npm ci
+
       - name: Backend lint
         working-directory: backend
         run: npm run lint --if-present
+
       - name: Backend test
         working-directory: backend
         run: npm test --if-present
+
       - name: Backend build
         working-directory: backend
         run: npm run build --if-present
 
+      # --------------------
+      # Debug (root + frontend) BEFORE npm ci
+      # --------------------
+      - name: Debug repo root lockfiles
+        run: |
+          echo "=== ROOT PWD ==="
+          pwd
+          echo "=== LIST ROOT ==="
+          ls -la
+          echo "=== FIND package-lock.json (maxdepth 3) ==="
+          find . -maxdepth 3 -name "package-lock.json" -print
+          echo "=== GREP typescript in repo (maxdepth 3) ==="
+          grep -RIn --exclude-dir=node_modules --exclude=package-lock.json "typescript" . || true
+
+      - name: Debug frontend files
+        working-directory: frontend
+        run: |
+          echo "=== FRONTEND PWD ==="
+          echo "PWD=$(pwd)"
+          echo "NODE=$(node -v)"
+          echo "NPM=$(npm -v)"
+
+          echo "----- package.json -----"
+          cat package.json
+
+          echo "----- package-lock.json (top 50 lines) -----"
+          head -n 50 package-lock.json || true
+
+          echo "----- grep typescript in frontend -----"
+          grep -n "typescript" package.json package-lock.json || true
+
+          echo "----- show lock root package section (packages['']) -----"
+          node -e "const l=require('./package-lock.json'); console.log(l.packages && l.packages[''] ? l.packages[''] : 'NO packages[\"\"]. Maybe lockfileVersion old?');"
+
+      # --------------------
+      # Frontend
+      # --------------------
       - name: Frontend install
         working-directory: frontend
         run: npm ci
+
       - name: Frontend lint
         working-directory: frontend
         run: npm run lint --if-present
+
       - name: Frontend test
         working-directory: frontend
         run: npm test --if-present
+
       - name: Frontend build
         working-directory: frontend
         run: npm run build --if-present
