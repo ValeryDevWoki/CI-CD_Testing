@@ -18,6 +18,9 @@
     "react-time-picker": "^7.0.0",
     "xlsx": "^0.18.5"
   },
+  "devDependencies": {
+    "typescript": "4.9.5"
+  },
   "license": "ISC",
   "browserslist": {
     "production": [
