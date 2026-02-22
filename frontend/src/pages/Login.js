@@ -3,7 +3,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './login.css';
 
-const API_BASE = process.env.REACT_APP_API_BASE || (process.env.NODE_ENV === 'production' ? '/api' : 'http://localhost:3001');
+const API_BASE =
+  process.env.REACT_APP_API_BASE ||
+  (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3001');
 const GOOGLE_CLIENT_ID = '588713129121-jf63q7kq2v2fkokbimksb6lqhd5263vc.apps.googleusercontent.com';
 
 export default function Login({ setUserRole, setIsAuthenticated, setUser }) {

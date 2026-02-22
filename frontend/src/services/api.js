@@ -1,7 +1,9 @@
 // src/services/api.js
 
 // Declare API_BASE only once at the top:
-const API_BASE = process.env.REACT_APP_API_BASE || (process.env.NODE_ENV === 'production' ? '/api' : 'http://localhost:3001');
+const API_BASE =
+  process.env.REACT_APP_API_BASE ||
+  (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3001');
 
 
 /**
