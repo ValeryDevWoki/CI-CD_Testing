@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [ "dev", "main" ]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Backend install
+        working-directory: backend
+        run: npm ci
+      - name: Backend lint
+        working-directory: backend
+        run: npm run lint --if-present
+      - name: Backend test
+        working-directory: backend
+        run: npm test --if-present
+      - name: Backend build
+        working-directory: backend
+        run: npm run build --if-present
+
+      - name: Frontend install
+        working-directory: frontend
+        run: npm ci
+      - name: Frontend lint
+        working-directory: frontend
+        run: npm run lint --if-present
+      - name: Frontend test
+        working-directory: frontend
+        run: npm test --if-present
+      - name: Frontend build
+        working-directory: frontend
+        run: npm run build --if-present
