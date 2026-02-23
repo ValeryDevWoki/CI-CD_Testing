@@ -143,4 +143,5 @@ curl -I http://127.0.0.1:3003/api/health || true
 После этого: `push` в `main` → деплой.
 
 
-CI/CD test API API API
+preview test 1
+
