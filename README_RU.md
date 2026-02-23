@@ -143,5 +143,7 @@ curl -I http://127.0.0.1:3003/api/health || true
 После этого: `push` в `main` → деплой.
 
 
-preview test pr-9
+
+preview test PR-10
+
 
