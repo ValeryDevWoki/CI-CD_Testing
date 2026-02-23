@@ -1,0 +1,35 @@
+name: Preview Cleanup
+
+on:
+  pull_request:
+    branches: ["dev"]
+    types: [closed]
+
+jobs:
+  cleanup_preview:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cleanup PR preview over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: 22
+          script_stop: true
+          script: |
+            set -euo pipefail
+
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+            APP_DIR="/opt/apps/yardena-previews/pr-${PR_NUMBER}"
+            PROJECT="yardena-pr-${PR_NUMBER}"
+
+            if [ ! -d "$APP_DIR" ]; then
+              echo "No preview dir for PR ${PR_NUMBER}, skipping"
+              exit 0
+            fi
+
+            docker compose -p "$PROJECT" -f "$APP_DIR/deploy/docker-compose.preview.yml" down -v --remove-orphans || true
+            rm -rf "$APP_DIR"
+
+            echo "✅ Preview cleaned"
