@@ -1,0 +1,61 @@
+name: Preview Deploy (PR -> dev)
+
+on:
+  pull_request:
+    branches: ["dev"]
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  deploy_preview:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy PR preview over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: 22
+          script_stop: true
+          script: |
+            set -euo pipefail
+
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+            PR_SHA="${{ github.event.pull_request.head.sha }}"
+            PR_HOST="pr-${PR_NUMBER}.linuxtest2.woki.co.il"
+
+            APP_DIR="/opt/apps/yardena-previews/pr-${PR_NUMBER}"
+            REPO_SSH="git@github.com:ValeryDevWoki/CI-CD_Testing.git"
+            PROJECT="yardena-pr-${PR_NUMBER}"
+
+            mkdir -p "$APP_DIR"
+
+            if [ ! -d "$APP_DIR/.git" ]; then
+              git clone "$REPO_SSH" "$APP_DIR"
+            fi
+
+            cd "$APP_DIR"
+            git fetch --all
+            git reset --hard "$PR_SHA"
+
+            # backend.env: если нет в PR-директории, скопируем из прод (yardena)
+            if [ ! -f "$APP_DIR/deploy/backend.env" ]; then
+              if [ -f "/opt/apps/yardena/deploy/backend.env" ]; then
+                cp /opt/apps/yardena/deploy/backend.env "$APP_DIR/deploy/backend.env"
+              else
+                echo "Missing $APP_DIR/deploy/backend.env and no fallback /opt/apps/yardena/deploy/backend.env" >&2
+                exit 1
+              fi
+            fi
+
+            export PR_HOST="$PR_HOST"
+
+            docker network create traefik_preview_public >/dev/null 2>&1 || true
+
+            docker compose -p "$PROJECT" -f "$APP_DIR/deploy/docker-compose.preview.yml" up -d --build --remove-orphans
+
+            echo "✅ Preview URL: http://${PR_HOST}/"
