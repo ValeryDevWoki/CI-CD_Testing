@@ -41,7 +41,7 @@ services:
       - backend
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.pr-${PR_NUMBER}.rule=(Host(`${PREVIEW_BASE_HOST}`) || Host(`www.${PREVIEW_BASE_HOST}`)) && PathPrefix(`${PR_PATH}`)"
+      - "traefik.http.routers.pr-${PR_NUMBER}.rule=HostRegexp(`linuxtest2\.woki\.co\.il(:[0-9]+)?`) && PathPrefix(`${PR_PATH}`)"
       - "traefik.http.routers.pr-${PR_NUMBER}.entrypoints=web"
       - "traefik.http.middlewares.pr-${PR_NUMBER}-strip.stripprefix.prefixes=${PR_PATH}"
       - "traefik.http.routers.pr-${PR_NUMBER}.middlewares=pr-${PR_NUMBER}-strip"

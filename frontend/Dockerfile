@@ -6,8 +6,6 @@ RUN npm ci || npm install
 
 COPY . .
 
-# IMPORTANT: CRA (react-scripts) uses PUBLIC_URL during build
-# to prefix asset paths (so /static/... becomes /pr/<PR>/static/...)
 ARG PUBLIC_URL=/
 ENV PUBLIC_URL=$PUBLIC_URL
 
