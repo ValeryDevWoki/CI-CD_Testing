@@ -42,7 +42,7 @@ jobs:
             git fetch --all
             git reset --hard "$PR_SHA"
 
-            # backend.env: если нет в PR-директории, скопируем из прод (yardena)
+            # backend.env fallback
             if [ ! -f "$APP_DIR/deploy/backend.env" ]; then
               if [ -f "/opt/apps/yardena/deploy/backend.env" ]; then
                 cp /opt/apps/yardena/deploy/backend.env "$APP_DIR/deploy/backend.env"
@@ -52,10 +52,12 @@ jobs:
               fi
             fi
 
+            # ВАЖНО: экспортируем для docker-compose интерполяции
+            export PR_NUMBER="$PR_NUMBER"
             export PR_HOST="$PR_HOST"
 
             docker network create traefik_preview_public >/dev/null 2>&1 || true
 
-            docker compose -p "$PROJECT" -f "$APP_DIR/deploy/docker-compose.preview.yml" up -d --build --remove-orphans
+            docker compose -p "$PROJECT" -f "$APP_DIR/deploy/docker-compose.preview.yml" up -d --build --force-recreate --remove-orphans
 
             echo "✅ Preview URL: http://${PR_HOST}/"
