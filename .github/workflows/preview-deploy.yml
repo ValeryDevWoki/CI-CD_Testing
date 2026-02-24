@@ -26,7 +26,10 @@ jobs:
 
             PR_NUMBER="${{ github.event.pull_request.number }}"
             PR_SHA="${{ github.event.pull_request.head.sha }}"
-            PR_HOST="pr-${PR_NUMBER}.linuxtest2.woki.co.il"
+
+            # Path-based preview (ONE stable host for all PRs)
+            PREVIEW_BASE_HOST="linuxtest2.woki.co.il"
+            PR_PATH="/pr/${PR_NUMBER}"
 
             APP_DIR="/opt/apps/yardena-previews/pr-${PR_NUMBER}"
             REPO_SSH="git@github.com:ValeryDevWoki/CI-CD_Testing.git"
@@ -52,10 +55,11 @@ jobs:
             fi
 
             export PR_NUMBER="$PR_NUMBER"
-            export PR_HOST="$PR_HOST"
+            export PREVIEW_BASE_HOST="$PREVIEW_BASE_HOST"
+            export PR_PATH="$PR_PATH"
 
             docker network create traefik_preview_public >/dev/null 2>&1 || true
 
             docker compose -p "$PROJECT" -f "$APP_DIR/deploy/docker-compose.preview.yml" up -d --build --force-recreate --remove-orphans
 
-            echo "✅ Preview URL: http://${PR_HOST}/"
+            echo "✅ Preview URL: https://${PREVIEW_BASE_HOST}${PR_PATH}/"

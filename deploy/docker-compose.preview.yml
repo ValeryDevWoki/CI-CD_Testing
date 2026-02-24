@@ -2,41 +2,63 @@ services:
   db:
     image: postgres:17-alpine
     restart: unless-stopped
-    env_file:
-      - backend.env
+    environment:
+      POSTGRES_DB: ${PGDATABASE:-yardena_test}
+      POSTGRES_USER: ${PGUSER:-yardena}
+      POSTGRES_PASSWORD: ${PGPASSWORD:-yardena_pass}
     volumes:
       - pr_db_data:/var/lib/postgresql/data
     networks:
       - traefik_preview_public
 
   backend:
-    build: ../backend
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
     restart: unless-stopped
-    env_file:
-      - backend.env
     depends_on:
       - db
+    environment:
+      NODE_ENV: production
+      PGHOST: db
+      PGPORT: "5432"
+      PGDATABASE: ${PGDATABASE:-yardena_test}
+      PGUSER: ${PGUSER:-yardena}
+      PGPASSWORD: ${PGPASSWORD:-yardena_pass}
+      PORT: "3001"
+      # Preview frontend lives on one host + path (/pr/<PR_NUMBER>)
+      FRONTEND_URL: "https://${PREVIEW_BASE_HOST}${PR_PATH}"
     networks:
       - traefik_preview_public
 
   frontend:
-    build: ../frontend
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        # CRA: make /static/... become ${PR_PATH}/static/...
+        PUBLIC_URL: "${PR_PATH}"
     restart: unless-stopped
     depends_on:
       - backend
-    networks:
-      - traefik_preview_public
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.pr-${PR_NUMBER}.rule=Host(`linuxtest2.woki.co.il`) && PathPrefix(`/pr/${PR_NUMBER}`)"
-      - "traefik.http.routers.pr-${PR_NUMBER}.entrypoints=web"
-      - "traefik.http.middlewares.pr-${PR_NUMBER}-strip.stripprefix.prefixes=/pr/${PR_NUMBER}"
-      - "traefik.http.routers.pr-${PR_NUMBER}.middlewares=pr-${PR_NUMBER}-strip"
-      - "traefik.http.services.pr-${PR_NUMBER}.loadbalancer.server.port=80"
 
-volumes:
-  pr_db_data:
+      # One host, different path per PR
+      - "traefik.http.routers.pr-${PR_NUMBER}.rule=Host(`${PREVIEW_BASE_HOST}`) && PathPrefix(`${PR_PATH}`)"
+      - "traefik.http.routers.pr-${PR_NUMBER}.entrypoints=web"
+
+      # Remove /pr/<PR_NUMBER> before sending to container
+      - "traefik.http.middlewares.pr-${PR_NUMBER}-strip.stripprefix.prefixes=${PR_PATH}"
+      - "traefik.http.routers.pr-${PR_NUMBER}.middlewares=pr-${PR_NUMBER}-strip"
+
+      - "traefik.http.services.pr-${PR_NUMBER}.loadbalancer.server.port=80"
+    networks:
+      - traefik_preview_public
 
 networks:
   traefik_preview_public:
     external: true
+
+volumes:
+  pr_db_data:

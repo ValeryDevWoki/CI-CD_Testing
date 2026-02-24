@@ -5,6 +5,11 @@ COPY package*.json ./
 RUN npm ci || npm install
 
 COPY . .
+
+# IMPORTANT: CRA reads PUBLIC_URL during build to prefix asset paths
+ARG PUBLIC_URL=/
+ENV PUBLIC_URL=$PUBLIC_URL
+
 RUN npm run build
 
 FROM nginx:1.27-alpine
