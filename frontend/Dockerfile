@@ -5,6 +5,10 @@ COPY package*.json ./
 RUN npm ci || npm install
 
 COPY . .
+
+ARG PUBLIC_URL=/
+ENV PUBLIC_URL=$PUBLIC_URL
+
 RUN npm run build
 
 FROM nginx:1.27-alpine
