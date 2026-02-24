@@ -42,7 +42,6 @@ jobs:
             git fetch --all
             git reset --hard "$PR_SHA"
 
-            # backend.env fallback
             if [ ! -f "$APP_DIR/deploy/backend.env" ]; then
               if [ -f "/opt/apps/yardena/deploy/backend.env" ]; then
                 cp /opt/apps/yardena/deploy/backend.env "$APP_DIR/deploy/backend.env"
@@ -52,7 +51,6 @@ jobs:
               fi
             fi
 
-            # ВАЖНО: экспортируем для docker-compose интерполяции
             export PR_NUMBER="$PR_NUMBER"
             export PR_HOST="$PR_HOST"
 
