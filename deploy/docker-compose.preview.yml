@@ -26,7 +26,6 @@ services:
       PGUSER: ${PGUSER:-yardena}
       PGPASSWORD: ${PGPASSWORD:-yardena_pass}
       PORT: "3001"
-      # Preview frontend lives on one host + path (/pr/<PR_NUMBER>)
       FRONTEND_URL: "https://${PREVIEW_BASE_HOST}${PR_PATH}"
     networks:
       - traefik_preview_public
@@ -36,22 +35,16 @@ services:
       context: ../frontend
       dockerfile: Dockerfile
       args:
-        # CRA: make /static/... become ${PR_PATH}/static/...
         PUBLIC_URL: "${PR_PATH}"
     restart: unless-stopped
     depends_on:
       - backend
     labels:
       - "traefik.enable=true"
-
-      # One host, different path per PR
       - "traefik.http.routers.pr-${PR_NUMBER}.rule=Host(`${PREVIEW_BASE_HOST}`) && PathPrefix(`${PR_PATH}`)"
       - "traefik.http.routers.pr-${PR_NUMBER}.entrypoints=web"
-
-      # Remove /pr/<PR_NUMBER> before sending to container
       - "traefik.http.middlewares.pr-${PR_NUMBER}-strip.stripprefix.prefixes=${PR_PATH}"
       - "traefik.http.routers.pr-${PR_NUMBER}.middlewares=pr-${PR_NUMBER}-strip"
-
       - "traefik.http.services.pr-${PR_NUMBER}.loadbalancer.server.port=80"
     networks:
       - traefik_preview_public

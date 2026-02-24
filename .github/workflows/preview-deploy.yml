@@ -27,7 +27,6 @@ jobs:
             PR_NUMBER="${{ github.event.pull_request.number }}"
             PR_SHA="${{ github.event.pull_request.head.sha }}"
 
-            # Path-based preview (ONE stable host for all PRs)
             PREVIEW_BASE_HOST="linuxtest2.woki.co.il"
             PR_PATH="/pr/${PR_NUMBER}"
 
@@ -45,6 +44,7 @@ jobs:
             git fetch --all
             git reset --hard "$PR_SHA"
 
+            # backend.env copy (keep your existing logic)
             if [ ! -f "$APP_DIR/deploy/backend.env" ]; then
               if [ -f "/opt/apps/yardena/deploy/backend.env" ]; then
                 cp /opt/apps/yardena/deploy/backend.env "$APP_DIR/deploy/backend.env"
