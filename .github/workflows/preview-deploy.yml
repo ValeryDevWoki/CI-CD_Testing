@@ -26,7 +26,9 @@ jobs:
 
             PR_NUMBER="${{ github.event.pull_request.number }}"
             PR_SHA="${{ github.event.pull_request.head.sha }}"
-            PR_HOST="pr-${PR_NUMBER}.linuxtest2.woki.co.il"
+
+            PREVIEW_BASE_HOST="linuxtest2.woki.co.il"
+            PR_PATH="/pr/${PR_NUMBER}"
 
             APP_DIR="/opt/apps/yardena-previews/pr-${PR_NUMBER}"
             REPO_SSH="git@github.com:ValeryDevWoki/CI-CD_Testing.git"
@@ -42,7 +44,7 @@ jobs:
             git fetch --all
             git reset --hard "$PR_SHA"
 
-            # backend.env: если нет в PR-директории, скопируем из прод (yardena)
+            # backend.env copy (keep your existing logic)
             if [ ! -f "$APP_DIR/deploy/backend.env" ]; then
               if [ -f "/opt/apps/yardena/deploy/backend.env" ]; then
                 cp /opt/apps/yardena/deploy/backend.env "$APP_DIR/deploy/backend.env"
@@ -52,10 +54,12 @@ jobs:
               fi
             fi
 
-            export PR_HOST="$PR_HOST"
+            export PR_NUMBER="$PR_NUMBER"
+            export PREVIEW_BASE_HOST="$PREVIEW_BASE_HOST"
+            export PR_PATH="$PR_PATH"
 
             docker network create traefik_preview_public >/dev/null 2>&1 || true
 
-            docker compose -p "$PROJECT" -f "$APP_DIR/deploy/docker-compose.preview.yml" up -d --build --remove-orphans
+            docker compose -p "$PROJECT" -f "$APP_DIR/deploy/docker-compose.preview.yml" up -d --build --force-recreate --remove-orphans
 
-            echo "✅ Preview URL: http://${PR_HOST}/"
+            echo "✅ Preview URL: https://${PREVIEW_BASE_HOST}${PR_PATH}/"
