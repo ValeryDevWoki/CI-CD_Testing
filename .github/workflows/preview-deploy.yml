@@ -22,8 +22,8 @@ jobs:
           port: 22
           script_stop: true
           script: |
+            bash -lc <<'BASH'
             set -euo pipefail
-            trap 'echo "❌ FAIL at line $LINENO: $BASH_COMMAND (exit=$?)"' ERR
 
             PR_NUMBER="${{ github.event.pull_request.number }}"
             PR_SHA="${{ github.event.pull_request.head.sha }}"
@@ -35,6 +35,13 @@ jobs:
             REPO_SSH="git@github.com:ValeryDevWoki/CI-CD_Testing.git"
             PROJECT="yardena-pr-${PR_NUMBER}"
 
+            MAIN_DB_CONTAINER="yardena-db-1"
+            PGUSER="yardena"
+            PGDATABASE="yardena_test"
+
+            echo "ENV CHECK: PR_NUMBER=$PR_NUMBER PREVIEW_BASE_HOST=$PREVIEW_BASE_HOST PR_PATH=$PR_PATH"
+            echo "APP_DIR=$APP_DIR PROJECT=$PROJECT"
+
             mkdir -p "$APP_DIR"
 
             if [ ! -d "$APP_DIR/.git" ]; then
@@ -45,12 +52,12 @@ jobs:
             git fetch --all
             git reset --hard "$PR_SHA"
 
-            # backend.env copy (keep your existing logic)
+            # backend.env copy
             if [ ! -f "$APP_DIR/deploy/backend.env" ]; then
               if [ -f "/opt/apps/yardena/deploy/backend.env" ]; then
                 cp /opt/apps/yardena/deploy/backend.env "$APP_DIR/deploy/backend.env"
               else
-                echo "Missing $APP_DIR/deploy/backend.env and no fallback /opt/apps/yardena/deploy/backend.env" >&2
+                echo "❌ Missing $APP_DIR/deploy/backend.env and no fallback /opt/apps/yardena/deploy/backend.env" >&2
                 exit 1
               fi
             fi
@@ -59,61 +66,67 @@ jobs:
             export PREVIEW_BASE_HOST="$PREVIEW_BASE_HOST"
             export PR_PATH="$PR_PATH"
 
-            echo "ENV CHECK: PR_NUMBER=$PR_NUMBER PREVIEW_BASE_HOST=$PREVIEW_BASE_HOST PR_PATH=$PR_PATH"
-
             docker network create traefik_preview_public >/dev/null 2>&1 || true
 
             # ---------------- DB snapshot (on-demand with cache) ----------------
-            DUMP_DIR="/opt/backups/yardena"
+            # Store cache INSIDE APP_DIR to avoid permission issues with /opt/backups
+            DUMP_DIR="$APP_DIR/.cache/db-dumps"
             DUMP="$DUMP_DIR/latest.dump"
             MAX_AGE_MIN=60
 
-            MAIN_DB_CONTAINER="yardena-db-1"
-            PGUSER="yardena"
-            PGDATABASE="yardena_test"
+            echo "STEP: prepare dump dir: $DUMP_DIR"
+            mkdir -p "$DUMP_DIR" || { echo "❌ Cannot mkdir $DUMP_DIR"; ls -ld "$APP_DIR" || true; exit 1; }
 
-            mkdir -p "$DUMP_DIR"
-
-            # Lock using mkdir (works reliably under ssh-action)
+            # Lock using mkdir (safe in ssh-action)
             LOCK_DIR="/tmp/yardena_dump.lockdir"
-            for i in {1..60}; do
+            echo "STEP: acquire lock: $LOCK_DIR"
+            for i in {1..120}; do
               if mkdir "$LOCK_DIR" 2>/dev/null; then
                 break
               fi
               sleep 1
             done
+            # ensure lock released
             trap 'rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT
 
             NEED_DUMP=true
             if [ -f "$DUMP" ]; then
-              AGE_MIN=$(( ( $(date +%s) - $(stat -c %Y "$DUMP") ) / 60 ))
+              # stat can fail sometimes; guard it
+              TS="$(stat -c %Y "$DUMP" 2>/dev/null || echo 0)"
+              NOW="$(date +%s)"
+              AGE_MIN=$(( (NOW - TS) / 60 ))
               if [ "$AGE_MIN" -lt "$MAX_AGE_MIN" ]; then
                 NEED_DUMP=false
               fi
             fi
 
             if $NEED_DUMP; then
-              echo "Creating fresh dump (missing/older than ${MAX_AGE_MIN}m)..."
+              echo "STEP: creating fresh dump (missing/older than ${MAX_AGE_MIN}m)"
               docker exec "$MAIN_DB_CONTAINER" pg_dump -U "$PGUSER" -d "$PGDATABASE" -Fc > "$DUMP"
               echo "Dump created: $(stat -c %s "$DUMP") bytes"
             else
-              echo "Using cached dump (fresh enough)."
+              echo "STEP: using cached dump (fresh enough)"
               echo "Dump size: $(stat -c %s "$DUMP") bytes"
             fi
             # ---------------------------------------------------------------
 
             # IMPORTANT: recreate PR DB volume to avoid restore conflicts
+            echo "STEP: down -v (fresh db volume)"
             docker compose -p "$PROJECT" -f "$APP_DIR/deploy/docker-compose.preview.yml" down -v --remove-orphans || true
 
-            # Bring stack up (fresh DB volume)
+            echo "STEP: up (build + start)"
             docker compose -p "$PROJECT" -f "$APP_DIR/deploy/docker-compose.preview.yml" up -d --build --force-recreate --remove-orphans
 
-            # Restore dump into PR db
             DB_CID=$(docker compose -p "$PROJECT" -f "$APP_DIR/deploy/docker-compose.preview.yml" ps -q db)
+            if [ -z "${DB_CID:-}" ]; then
+              echo "❌ Could not resolve DB container id" >&2
+              docker compose -p "$PROJECT" -f "$APP_DIR/deploy/docker-compose.preview.yml" ps || true
+              exit 1
+            fi
             echo "PR DB container: $DB_CID"
 
-            echo "Waiting for PR Postgres..."
-            for i in {1..60}; do
+            echo "STEP: wait for postgres"
+            for i in {1..90}; do
               if docker exec "$DB_CID" pg_isready -U "$PGUSER" -d "$PGDATABASE" >/dev/null 2>&1; then
                 echo "Postgres ready"
                 break
@@ -121,7 +134,7 @@ jobs:
               sleep 2
             done
 
-            echo "Restoring dump into fresh PR DB..."
+            echo "STEP: restore dump into fresh PR DB"
             set +e
             cat "$DUMP" | docker exec -i "$DB_CID" pg_restore \
               -U "$PGUSER" -d "$PGDATABASE" \
@@ -139,3 +152,4 @@ jobs:
 
             echo "✅ Restore done"
             echo "✅ Preview URL: https://${PREVIEW_BASE_HOST}${PR_PATH}/"
+            BASH
