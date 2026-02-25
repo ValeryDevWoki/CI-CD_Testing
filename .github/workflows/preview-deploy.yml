@@ -24,7 +24,6 @@ jobs:
           script: |
             set -euo pipefail
             trap 'echo "❌ FAIL at line $LINENO: $BASH_COMMAND (exit=$?)"' ERR
-            set -x
 
             PR_NUMBER="${{ github.event.pull_request.number }}"
             PR_SHA="${{ github.event.pull_request.head.sha }}"
@@ -87,7 +86,7 @@ jobs:
               fi
             fi
 
-            if [ "$NEED_DUMP" = true ]; then
+            if $NEED_DUMP; then
               echo "Creating fresh dump (missing/older than ${MAX_AGE_MIN}m)..."
               docker exec "$MAIN_DB_CONTAINER" pg_dump -U "$PGUSER" -d "$PGDATABASE" -Fc > "$DUMP"
               echo "Dump created: $(stat -c %s "$DUMP") bytes"
