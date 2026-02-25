@@ -4,19 +4,23 @@
 // In production root site (no /pr/<N>) it returns ''.
 function detectBasePath() {
   if (typeof window === 'undefined') return '';
-
   const match = window.location.pathname.match(/^\/pr\/\d+/);
   return match ? match[0] : '';
 }
 
 // If you set REACT_APP_API_BASE it overrides everything (useful for local dev).
 // Otherwise:
-// - production/preview: use detected base path ('' or '/pr/<N>') and then '/api' is appended in helpers
+// - production/preview: use detected base path ('' or '/pr/<N>')
 // - dev: default to http://localhost:3001
 const API_BASE =
   process.env.REACT_APP_API_BASE ||
   (process.env.NODE_ENV === 'production' ? detectBasePath() : 'http://localhost:3001');
 
+/**
+ * @param {Response} res
+ * @returns {Promise<any>}
+ * @throws {Error} with either JSON.error or raw text
+ */
 async function handleResponse(res) {
   const raw = await res.text();
 
@@ -38,7 +42,7 @@ async function handleResponse(res) {
   throw new Error(msg || `HTTP ${res.status}`);
 }
 
-// Helpers: pass path like '/permissions' => `${API_BASE}/api/permissions`
+// Helpers: pass path like '/skills' => `${API_BASE}/api/skills`
 async function apiGet(path) {
   const res = await fetch(`${API_BASE}/api${path}`, { credentials: 'include' });
   return handleResponse(res);
@@ -259,10 +263,10 @@ export async function sendRegistrationReminder(weekCode) {
 }
 
 /* =========================
-   PERMISSIONS  ✅ (fix build)
+   PERMISSIONS ✅
    ========================= */
 export async function fetchAllPermissions() {
-  return apiGet('/permissions'); // backend GET /api/permissions
+  return apiGet('/permissions'); // backend: GET /api/permissions
 }
 
 export async function fetchRolePermissions(roleId) {
@@ -271,4 +275,26 @@ export async function fetchRolePermissions(roleId) {
 
 export async function updateRolePermissions(roleId, permissionIds) {
   return apiPut(`/roles/${roleId}/permissions`, { permissionIds });
+}
+
+/* =========================
+   SKILLS ✅
+   ========================= */
+export async function fetchSkills() {
+  return apiGet('/skills'); // backend: GET /api/skills
+}
+
+export async function createSkill(skillName) {
+  // backend ожидает { skill_name }
+  return apiPost('/skills', { skill_name: skillName });
+}
+
+export async function updateSkill(id, newSkillName) {
+  // backend: PUT /api/skills/:id
+  return apiPut(`/skills/${id}`, { skill_name: newSkillName });
+}
+
+export async function deleteSkill(id) {
+  // backend: DELETE /api/skills/:id
+  return apiDelete(`/skills/${id}`);
 }
