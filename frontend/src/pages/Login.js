@@ -64,18 +64,21 @@ export default function Login({ setUserRole, setIsAuthenticated, setUser }) {
     }, []);
 
     async function handleCredResponse(response) {
-        if (!response.credential) {
-            showError('No credential received from Google.');
-            return;
-        }
-        setIsLoading(true);
-        try {
-            const res = await fetch(`${API_BASE}/api/login/google`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({ credential: response.credential }),
-            });
+  if (!response.credential) {
+    showError('No credential received from Google.');
+    return;
+  }
+  setIsLoading(true);
+  try {
+    const basePath = process.env.PUBLIC_URL || '';
+    const apiBase = API_BASE || basePath; // prod: /pr/<N>, dev: http://localhost:3001
+
+    const res = await fetch(`${apiBase}/api/login/google`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ credential: response.credential }),
+    });
 
             if (!res.ok) {
                 let msg = 'Google login failed';
