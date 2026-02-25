@@ -2,39 +2,71 @@ services:
   db:
     image: postgres:17-alpine
     restart: unless-stopped
-    env_file:
-      - backend.env
+    environment:
+      POSTGRES_DB: ${PGDATABASE:-yardena_test}
+      POSTGRES_USER: ${PGUSER:-yardena}
+      POSTGRES_PASSWORD: ${PGPASSWORD:-yardena_pass}
     volumes:
       - pr_db_data:/var/lib/postgresql/data
     networks:
       - traefik_preview_public
 
   backend:
-    build: ../backend
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
     restart: unless-stopped
-    env_file:
-      - backend.env
     depends_on:
       - db
-    networks:
-      - traefik_preview_public
-
-  frontend:
-    build: ../frontend
-    restart: unless-stopped
-    depends_on:
-      - backend
+    environment:
+      NODE_ENV: production
+      PGHOST: db
+      PGPORT: "5432"
+      PGDATABASE: ${PGDATABASE:-yardena_test}
+      PGUSER: ${PGUSER:-yardena}
+      PGPASSWORD: ${PGPASSWORD:-yardena_pass}
+      PORT: "3001"
+      FRONTEND_URL: "https://${PREVIEW_BASE_HOST}${PR_PATH}"
     networks:
       - traefik_preview_public
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.app.rule=Host(`${PR_HOST}`)"
-      - "traefik.http.routers.app.entrypoints=web"
-      - "traefik.http.services.app.loadbalancer.server.port=80"
 
-volumes:
-  pr_db_data:
+      # API: https://linuxtest2.woki.co.il/pr/<N>/api/*  -> backend:3001
+      # strip /pr/<N> so backend receives /api/*
+      - "traefik.http.routers.pr-${PR_NUMBER}-api.rule=Host(`${PREVIEW_BASE_HOST}`) && PathPrefix(`${PR_PATH}/api`)"
+      - "traefik.http.routers.pr-${PR_NUMBER}-api.entrypoints=web"
+      - "traefik.http.middlewares.pr-${PR_NUMBER}-api-strip.stripprefix.prefixes=${PR_PATH}"
+      - "traefik.http.routers.pr-${PR_NUMBER}-api.middlewares=pr-${PR_NUMBER}-api-strip"
+      - "traefik.http.services.pr-${PR_NUMBER}-api.loadbalancer.server.port=3001"
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        PUBLIC_URL: "${PR_PATH}"
+    restart: unless-stopped
+    depends_on:
+      - backend
+    labels:
+      - "traefik.enable=true"
+
+
+
+      - "traefik.http.routers.pr-${PR_NUMBER}.rule=Host(`${PREVIEW_BASE_HOST}`) && PathPrefix(`${PR_PATH}`)"
+
+
+      - "traefik.http.routers.pr-${PR_NUMBER}.entrypoints=web"
+      - "traefik.http.middlewares.pr-${PR_NUMBER}-strip.stripprefix.prefixes=${PR_PATH}"
+      - "traefik.http.routers.pr-${PR_NUMBER}.middlewares=pr-${PR_NUMBER}-strip"
+      - "traefik.http.services.pr-${PR_NUMBER}.loadbalancer.server.port=80"
+    networks:
+      - traefik_preview_public
 
 networks:
   traefik_preview_public:
     external: true
+
+volumes:
+  pr_db_data:
