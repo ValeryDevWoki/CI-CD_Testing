@@ -52,9 +52,11 @@ services:
     labels:
       - "traefik.enable=true"
 
-      # UI: https://linuxtest2.woki.co.il/pr/<N>/* -> frontend:80
-      # strip /pr/<N> so the app still serves from /
+
+
       - "traefik.http.routers.pr-${PR_NUMBER}.rule=Host(`${PREVIEW_BASE_HOST}`) && PathPrefix(`${PR_PATH}`)"
+
+
       - "traefik.http.routers.pr-${PR_NUMBER}.entrypoints=web"
       - "traefik.http.middlewares.pr-${PR_NUMBER}-strip.stripprefix.prefixes=${PR_PATH}"
       - "traefik.http.routers.pr-${PR_NUMBER}.middlewares=pr-${PR_NUMBER}-strip"
