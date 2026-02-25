@@ -86,8 +86,10 @@ jobs:
             if [ "$NEED_DUMP" = true ]; then
               echo "Creating fresh dump (missing/older than ${MAX_AGE_MIN}m)..."
               docker exec "$MAIN_DB_CONTAINER" pg_dump -U "$PGUSER" -d "$PGDATABASE" -Fc > "$DUMP"
+              echo "Dump created: $(stat -c %s "$DUMP") bytes"
             else
               echo "Using cached dump (fresh enough)."
+              echo "Dump size: $(stat -c %s "$DUMP") bytes"
             fi
             # ---------------------------------------------------------------
 
@@ -104,13 +106,29 @@ jobs:
             echo "Waiting for PR Postgres..."
             for i in {1..60}; do
               if docker exec "$DB_CID" pg_isready -U "$PGUSER" -d "$PGDATABASE" >/dev/null 2>&1; then
+                echo "Postgres ready"
                 break
               fi
               sleep 2
             done
 
             echo "Restoring dump into fresh PR DB..."
-            cat "$DUMP" | docker exec -i "$DB_CID" pg_restore -U "$PGUSER" -d "$PGDATABASE" --no-owner --no-privileges
-            echo "✅ Restore done"
+            # --clean --if-exists makes restore idempotent and avoids conflicts
+            # We keep --no-owner --no-privileges for safe restores
+            set +e
+            cat "$DUMP" | docker exec -i "$DB_CID" pg_restore \
+              -U "$PGUSER" -d "$PGDATABASE" \
+              --clean --if-exists \
+              --no-owner --no-privileges
+            RESTORE_RC=$?
+            set -e
 
+            if [ "$RESTORE_RC" -ne 0 ]; then
+              echo "❌ pg_restore failed with code $RESTORE_RC"
+              echo "---- Last DB logs ----"
+              docker logs --tail=200 "$DB_CID" || true
+              exit 1
+            fi
+
+            echo "✅ Restore done"
             echo "✅ Preview URL: https://${PREVIEW_BASE_HOST}${PR_PATH}/"
