@@ -263,7 +263,7 @@ export async function sendRegistrationReminder(weekCode) {
 }
 
 /* =========================
-   PERMISSIONS ✅
+   PERMISSIONS
    ========================= */
 export async function fetchAllPermissions() {
   return apiGet('/permissions'); // backend: GET /api/permissions
@@ -278,23 +278,132 @@ export async function updateRolePermissions(roleId, permissionIds) {
 }
 
 /* =========================
-   SKILLS ✅
+   SKILLS
    ========================= */
 export async function fetchSkills() {
   return apiGet('/skills'); // backend: GET /api/skills
 }
 
-export async function createSkill(skillName) {
-  // backend ожидает { skill_name }
-  return apiPost('/skills', { skill_name: skillName });
+// Support BOTH usages:
+// - createSkill("Skill Name")
+// - createSkill({ skill_name: "Skill Name" })  (UserManagementPage uses this)
+export async function createSkill(arg) {
+  const body =
+    typeof arg === 'string'
+      ? { skill_name: arg }
+      : (arg && typeof arg === 'object' ? arg : {});
+  return apiPost('/skills', body);
 }
 
-export async function updateSkill(id, newSkillName) {
-  // backend: PUT /api/skills/:id
-  return apiPut(`/skills/${id}`, { skill_name: newSkillName });
+// Support BOTH usages:
+// - updateSkill(id, "New Name")
+// - updateSkill(id, { skill_name: "New Name" })  (UserManagementPage uses this)
+export async function updateSkill(id, arg) {
+  const body =
+    typeof arg === 'string'
+      ? { skill_name: arg }
+      : (arg && typeof arg === 'object' ? arg : {});
+  return apiPut(`/skills/${id}`, body);
 }
 
 export async function deleteSkill(id) {
-  // backend: DELETE /api/skills/:id
   return apiDelete(`/skills/${id}`);
+}
+
+/* =========================
+   ROLES (needed by UserManagementPage imports)
+   ========================= */
+// Adjust endpoints here if your backend differs.
+export async function fetchRoles() {
+  return apiGet('/roles');
+}
+
+export async function createRole(body) {
+  return apiPost('/roles', body);
+}
+
+export async function updateRole(roleId, body) {
+  return apiPut(`/roles/${roleId}`, body);
+}
+
+export async function deleteRole(roleId) {
+  return apiDelete(`/roles/${roleId}`);
+}
+
+/* =========================
+   MANAGER CATEGORIES (needed by UserManagementPage imports)
+   ========================= */
+export async function fetchManagerCategories() {
+  return apiGet('/manager-categories');
+}
+
+export async function createManagerCategory(body) {
+  return apiPost('/manager-categories', body);
+}
+
+export async function updateManagerCategory(categoryId, body) {
+  return apiPut(`/manager-categories/${categoryId}`, body);
+}
+
+export async function deleteManagerCategory(categoryId) {
+  return apiDelete(`/manager-categories/${categoryId}`);
+}
+
+/* =========================
+   MANAGERS (needed by UserManagementPage imports)
+   ========================= */
+export async function fetchManagers() {
+  return apiGet('/managers');
+}
+
+export async function createManager(body) {
+  return apiPost('/managers', body);
+}
+
+export async function updateManager(managerId, body) {
+  return apiPut(`/managers/${managerId}`, body);
+}
+
+export async function deleteManager(managerId) {
+  return apiDelete(`/managers/${managerId}`);
+}
+
+/* =========================
+   EMPLOYEE <-> MANAGER ASSIGNMENTS (needed by UserManagementPage imports)
+   ========================= */
+export async function fetchEmployeesWithManager() {
+  return apiGet('/employees-with-manager');
+}
+
+export async function assignEmployeeManager(body) {
+  // expected body: { employee_id, manager_id }
+  return apiPost('/employee-manager', body);
+}
+
+export async function unassignEmployeeManager(employeeId) {
+  // common REST shape: DELETE /api/employee-manager/:employeeId
+  return apiDelete(`/employee-manager/${employeeId}`);
+}
+
+/* =========================
+   STATIC SHIFTS (fix CI import updateStaticShift)
+   ========================= */
+export async function fetchStaticShifts(weekCode) {
+  return apiGet(`/shifts_static/${weekCode}`);
+}
+
+export async function createStaticShift(body) {
+  return apiPost('/shifts_static', body);
+}
+
+export async function updateStaticShift(body) {
+  if (!body || (body.id === undefined || body.id === null)) {
+    // fallback: backend might accept PUT /api/shifts_static without id in url
+    return apiPut('/shifts_static', body);
+  }
+  return apiPut(`/shifts_static/${body.id}`, body);
+}
+
+export async function deleteStaticShift(id) {
+  return apiDelete(`/shifts_static/${id}`);
 }
