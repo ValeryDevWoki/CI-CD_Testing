@@ -62,4 +62,61 @@ jobs:
 
             docker compose -p "$PROJECT" -f "$APP_DIR/deploy/docker-compose.preview.yml" up -d --build --force-recreate --remove-orphans
 
+            # ---------------- DB snapshot (on-demand with cache) ----------------
+            DUMP_DIR="/opt/backups/yardena"
+            DUMP="$DUMP_DIR/latest.dump"
+            MAX_AGE_MIN=60
+
+            # main DB settings (your current stack)
+            MAIN_DB_CONTAINER="yardena-db-1"
+            PGUSER="yardena"
+            PGDATABASE="yardena_test"
+
+            mkdir -p "$DUMP_DIR"
+
+            # create/refresh dump only if missing or older than MAX_AGE_MIN
+            NEED_DUMP=true
+            if [ -f "$DUMP" ]; then
+              AGE_MIN=$(( ( $(date +%s) - $(stat -c %Y "$DUMP") ) / 60 ))
+              if [ "$AGE_MIN" -lt "$MAX_AGE_MIN" ]; then
+                NEED_DUMP=false
+              fi
+            fi
+
+            # lock to avoid 2 parallel previews writing dump at same time
+            exec 9>/tmp/yardena_dump.lock
+            flock 9
+
+            if [ "$NEED_DUMP" = true ]; then
+              echo "Creating fresh dump (missing/older than ${MAX_AGE_MIN}m)..."
+              docker exec "$MAIN_DB_CONTAINER" pg_dump -U "$PGUSER" -d "$PGDATABASE" -Fc > "$DUMP"
+            else
+              echo "Using cached dump (fresh enough)."
+            fi
+
+            # Restore into PR db only if empty
+            DB_CID=$(docker compose -p "$PROJECT" -f "$APP_DIR/deploy/docker-compose.preview.yml" ps -q db)
+            echo "PR DB container: $DB_CID"
+
+            echo "Waiting for PR Postgres..."
+            for i in {1..60}; do
+              if docker exec "$DB_CID" pg_isready -U "$PGUSER" -d "$PGDATABASE" >/dev/null 2>&1; then
+                break
+              fi
+              sleep 2
+            done
+
+            TABLES_COUNT=$(docker exec "$DB_CID" psql -U "$PGUSER" -d "$PGDATABASE" -tAc "select count(*) from pg_tables where schemaname='public';" || echo "0")
+            TABLES_COUNT=$(echo "$TABLES_COUNT" | tr -d '[:space:]')
+
+            if [ "$TABLES_COUNT" = "0" ]; then
+              echo "PR DB is empty. Restoring dump..."
+              docker exec "$DB_CID" psql -U "$PGUSER" -d "$PGDATABASE" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+              cat "$DUMP" | docker exec -i "$DB_CID" pg_restore -U "$PGUSER" -d "$PGDATABASE" --no-owner --no-privileges
+              echo "✅ Restore done"
+            else
+              echo "PR DB already has tables ($TABLES_COUNT). Skipping restore."
+            fi
+            # ---------------------------------------------------------------
+
             echo "✅ Preview URL: https://${PREVIEW_BASE_HOST}${PR_PATH}/"
