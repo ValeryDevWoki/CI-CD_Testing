@@ -22,8 +22,12 @@ jobs:
           port: 22
           script_stop: true
           script: |
-            bash -lc <<'BASH'
             set -euo pipefail
+            trap 'echo "❌ FAIL at line $LINENO: $BASH_COMMAND (exit=$?)"' ERR
+
+            echo "SHELL=$SHELL"
+            echo "BASH_VERSION=${BASH_VERSION:-none}"
+            echo "0=$0"
 
             PR_NUMBER="${{ github.event.pull_request.number }}"
             PR_SHA="${{ github.event.pull_request.head.sha }}"
@@ -42,12 +46,18 @@ jobs:
             echo "ENV CHECK: PR_NUMBER=$PR_NUMBER PREVIEW_BASE_HOST=$PREVIEW_BASE_HOST PR_PATH=$PR_PATH"
             echo "APP_DIR=$APP_DIR PROJECT=$PROJECT"
 
+            echo "STEP: check docker access"
+            docker ps >/dev/null
+
+            echo "STEP: prepare APP_DIR"
             mkdir -p "$APP_DIR"
 
             if [ ! -d "$APP_DIR/.git" ]; then
+              echo "STEP: clone repo"
               git clone "$REPO_SSH" "$APP_DIR"
             fi
 
+            echo "STEP: checkout PR SHA"
             cd "$APP_DIR"
             git fetch --all
             git reset --hard "$PR_SHA"
@@ -69,15 +79,15 @@ jobs:
             docker network create traefik_preview_public >/dev/null 2>&1 || true
 
             # ---------------- DB snapshot (on-demand with cache) ----------------
-            # Store cache INSIDE APP_DIR to avoid permission issues with /opt/backups
+            # store dump cache inside PR directory to avoid permission issues
             DUMP_DIR="$APP_DIR/.cache/db-dumps"
             DUMP="$DUMP_DIR/latest.dump"
             MAX_AGE_MIN=60
 
             echo "STEP: prepare dump dir: $DUMP_DIR"
-            mkdir -p "$DUMP_DIR" || { echo "❌ Cannot mkdir $DUMP_DIR"; ls -ld "$APP_DIR" || true; exit 1; }
+            mkdir -p "$DUMP_DIR"
 
-            # Lock using mkdir (safe in ssh-action)
+            # lock using mkdir (reliable in ssh-action)
             LOCK_DIR="/tmp/yardena_dump.lockdir"
             echo "STEP: acquire lock: $LOCK_DIR"
             for i in {1..120}; do
@@ -86,12 +96,10 @@ jobs:
               fi
               sleep 1
             done
-            # ensure lock released
             trap 'rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT
 
             NEED_DUMP=true
             if [ -f "$DUMP" ]; then
-              # stat can fail sometimes; guard it
               TS="$(stat -c %Y "$DUMP" 2>/dev/null || echo 0)"
               NOW="$(date +%s)"
               AGE_MIN=$(( (NOW - TS) / 60 ))
@@ -117,7 +125,7 @@ jobs:
             echo "STEP: up (build + start)"
             docker compose -p "$PROJECT" -f "$APP_DIR/deploy/docker-compose.preview.yml" up -d --build --force-recreate --remove-orphans
 
-            DB_CID=$(docker compose -p "$PROJECT" -f "$APP_DIR/deploy/docker-compose.preview.yml" ps -q db)
+            DB_CID="$(docker compose -p "$PROJECT" -f "$APP_DIR/deploy/docker-compose.preview.yml" ps -q db)"
             if [ -z "${DB_CID:-}" ]; then
               echo "❌ Could not resolve DB container id" >&2
               docker compose -p "$PROJECT" -f "$APP_DIR/deploy/docker-compose.preview.yml" ps || true
@@ -126,13 +134,21 @@ jobs:
             echo "PR DB container: $DB_CID"
 
             echo "STEP: wait for postgres"
+            READY=false
             for i in {1..90}; do
               if docker exec "$DB_CID" pg_isready -U "$PGUSER" -d "$PGDATABASE" >/dev/null 2>&1; then
-                echo "Postgres ready"
+                READY=true
                 break
               fi
               sleep 2
             done
+
+            if [ "$READY" != "true" ]; then
+              echo "❌ Postgres not ready in time"
+              docker logs --tail=200 "$DB_CID" || true
+              exit 1
+            fi
+            echo "Postgres ready"
 
             echo "STEP: restore dump into fresh PR DB"
             set +e
@@ -152,4 +168,3 @@ jobs:
 
             echo "✅ Restore done"
             echo "✅ Preview URL: https://${PREVIEW_BASE_HOST}${PR_PATH}/"
-            BASH
