@@ -31,8 +31,12 @@ function App() {
     // For convenience
     const isAdminOrManager = (userRole === 'Admin' || userRole === 'Manager');
 
+    // IMPORTANT for path-based preview (/pr/<N>/...):
+    // CRA builds with PUBLIC_URL=/pr/<N>, so we use it as router basename.
+    const basename = process.env.PUBLIC_URL || '/';
+
     return (
-        <Router>
+        <Router basename={basename}>
             {/* Conditionally render the NavBar if authenticated */}
             {isAuthenticated && <NavBar userRole={userRole} onLogout={handleLogout} />}
 
