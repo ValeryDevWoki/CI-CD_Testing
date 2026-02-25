@@ -32,13 +32,12 @@ services:
     labels:
       - "traefik.enable=true"
 
-      # Route: https://linuxtest2.woki.co.il/pr/<N>/api/*  -> backend:3001  (strip /pr/<N>)
+      # API: https://linuxtest2.woki.co.il/pr/<N>/api/*  -> backend:3001
+      # strip /pr/<N> so backend receives /api/*
       - "traefik.http.routers.pr-${PR_NUMBER}-api.rule=Host(`${PREVIEW_BASE_HOST}`) && PathPrefix(`${PR_PATH}/api`)"
       - "traefik.http.routers.pr-${PR_NUMBER}-api.entrypoints=web"
-
       - "traefik.http.middlewares.pr-${PR_NUMBER}-api-strip.stripprefix.prefixes=${PR_PATH}"
       - "traefik.http.routers.pr-${PR_NUMBER}-api.middlewares=pr-${PR_NUMBER}-api-strip"
-
       - "traefik.http.services.pr-${PR_NUMBER}-api.loadbalancer.server.port=3001"
 
   frontend:
@@ -53,13 +52,12 @@ services:
     labels:
       - "traefik.enable=true"
 
-      # Route: https://linuxtest2.woki.co.il/pr/<N>/* -> frontend:80 (strip /pr/<N>)
+      # UI: https://linuxtest2.woki.co.il/pr/<N>/* -> frontend:80
+      # strip /pr/<N> so the app still serves from /
       - "traefik.http.routers.pr-${PR_NUMBER}.rule=Host(`${PREVIEW_BASE_HOST}`) && PathPrefix(`${PR_PATH}`)"
       - "traefik.http.routers.pr-${PR_NUMBER}.entrypoints=web"
-
       - "traefik.http.middlewares.pr-${PR_NUMBER}-strip.stripprefix.prefixes=${PR_PATH}"
       - "traefik.http.routers.pr-${PR_NUMBER}.middlewares=pr-${PR_NUMBER}-strip"
-
       - "traefik.http.services.pr-${PR_NUMBER}.loadbalancer.server.port=80"
     networks:
       - traefik_preview_public
