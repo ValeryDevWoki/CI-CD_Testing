@@ -81,7 +81,7 @@ async function apiDelete(path) {
    ========================= */
 export async function fetchEmployees() {
   const data = await apiGet('/employees');
-  return data.map((emp) => ({ ...emp, name: emp.full_name }));
+  return Array.isArray(data) ? data.map((emp) => ({ ...emp, name: emp.full_name })) : data;
 }
 
 export async function createEmployee(empData) {
@@ -100,7 +100,7 @@ export async function createUser(userData) {
 }
 
 export async function updateUser(userData) {
-  if (!userData.id) throw new Error('updateUser requires an id');
+  if (!userData?.id) throw new Error('updateUser requires an id');
   return apiPut(`/users/${userData.id}`, userData);
 }
 
@@ -137,6 +137,11 @@ export async function fetchShifts(weekCode) {
   return apiGet(`/shifts/${weekCode}`);
 }
 
+// ✅ Alias (pages still import this name)
+export async function fetchShiftsByWeek(weekCode) {
+  return fetchShifts(weekCode);
+}
+
 export async function createShift(shiftData) {
   const res = await fetch(`${API_BASE}/api/shifts`, {
     method: 'POST',
@@ -148,7 +153,7 @@ export async function createShift(shiftData) {
 }
 
 export async function updateShift(shiftData) {
-  if (!shiftData.id) throw new Error('updateShift requires an id');
+  if (!shiftData?.id) throw new Error('updateShift requires an id');
   const res = await fetch(`${API_BASE}/api/shifts/${shiftData.id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -251,7 +256,15 @@ export async function fetchWeekLockStatus(weekCode) {
 }
 
 export async function updateWeekLock(weekCode, { locked, lock_date }) {
-  return apiPut(`/week-lock/${weekCode}`, { locked, lock_date });
+  // keep compatibility with your previous direct fetch approach
+  const body = { locked, lock_date };
+  const res = await fetch(`${API_BASE}/api/week-lock/${weekCode}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    credentials: 'include',
+  });
+  return handleResponse(res);
 }
 
 export async function sendRegistrationReminder(weekCode) {
@@ -284,25 +297,17 @@ export async function fetchSkills() {
   return apiGet('/skills'); // backend: GET /api/skills
 }
 
-// Support BOTH usages:
-// - createSkill("Skill Name")
-// - createSkill({ skill_name: "Skill Name" })  (UserManagementPage uses this)
+// supports createSkill("Name") OR createSkill({skill_name:"Name"})
 export async function createSkill(arg) {
   const body =
-    typeof arg === 'string'
-      ? { skill_name: arg }
-      : (arg && typeof arg === 'object' ? arg : {});
+    typeof arg === 'string' ? { skill_name: arg } : (arg && typeof arg === 'object' ? arg : {});
   return apiPost('/skills', body);
 }
 
-// Support BOTH usages:
-// - updateSkill(id, "New Name")
-// - updateSkill(id, { skill_name: "New Name" })  (UserManagementPage uses this)
+// supports updateSkill(id, "Name") OR updateSkill(id, {skill_name:"Name"})
 export async function updateSkill(id, arg) {
   const body =
-    typeof arg === 'string'
-      ? { skill_name: arg }
-      : (arg && typeof arg === 'object' ? arg : {});
+    typeof arg === 'string' ? { skill_name: arg } : (arg && typeof arg === 'object' ? arg : {});
   return apiPut(`/skills/${id}`, body);
 }
 
@@ -311,9 +316,31 @@ export async function deleteSkill(id) {
 }
 
 /* =========================
-   ROLES (needed by UserManagementPage imports)
+   STATIC SHIFTS (shifts_static)
    ========================= */
-// Adjust endpoints here if your backend differs.
+export async function fetchStaticShifts(weekCode) {
+  return apiGet(`/shifts_static/${weekCode}`);
+}
+
+export async function createStaticShift(body) {
+  return apiPost('/shifts_static', body);
+}
+
+export async function updateStaticShift(body) {
+  if (!body || body.id === undefined || body.id === null) {
+    // if backend expects PUT without id in URL
+    return apiPut('/shifts_static', body);
+  }
+  return apiPut(`/shifts_static/${body.id}`, body);
+}
+
+export async function deleteStaticShift(id) {
+  return apiDelete(`/shifts_static/${id}`);
+}
+
+/* =========================
+   ROLES (used in UserManagementPage)
+   ========================= */
 export async function fetchRoles() {
   return apiGet('/roles');
 }
@@ -331,7 +358,7 @@ export async function deleteRole(roleId) {
 }
 
 /* =========================
-   MANAGER CATEGORIES (needed by UserManagementPage imports)
+   MANAGER CATEGORIES (used in UserManagementPage)
    ========================= */
 export async function fetchManagerCategories() {
   return apiGet('/manager-categories');
@@ -350,7 +377,7 @@ export async function deleteManagerCategory(categoryId) {
 }
 
 /* =========================
-   MANAGERS (needed by UserManagementPage imports)
+   MANAGERS (used in UserManagementPage)
    ========================= */
 export async function fetchManagers() {
   return apiGet('/managers');
@@ -369,41 +396,17 @@ export async function deleteManager(managerId) {
 }
 
 /* =========================
-   EMPLOYEE <-> MANAGER ASSIGNMENTS (needed by UserManagementPage imports)
+   EMPLOYEE <-> MANAGER ASSIGNMENTS (used in UserManagementPage)
    ========================= */
 export async function fetchEmployeesWithManager() {
   return apiGet('/employees-with-manager');
 }
 
 export async function assignEmployeeManager(body) {
-  // expected body: { employee_id, manager_id }
+  // expected: { employee_id, manager_id }
   return apiPost('/employee-manager', body);
 }
 
 export async function unassignEmployeeManager(employeeId) {
-  // common REST shape: DELETE /api/employee-manager/:employeeId
   return apiDelete(`/employee-manager/${employeeId}`);
-}
-
-/* =========================
-   STATIC SHIFTS (fix CI import updateStaticShift)
-   ========================= */
-export async function fetchStaticShifts(weekCode) {
-  return apiGet(`/shifts_static/${weekCode}`);
-}
-
-export async function createStaticShift(body) {
-  return apiPost('/shifts_static', body);
-}
-
-export async function updateStaticShift(body) {
-  if (!body || (body.id === undefined || body.id === null)) {
-    // fallback: backend might accept PUT /api/shifts_static without id in url
-    return apiPut('/shifts_static', body);
-  }
-  return apiPut(`/shifts_static/${body.id}`, body);
-}
-
-export async function deleteStaticShift(id) {
-  return apiDelete(`/shifts_static/${id}`);
 }
