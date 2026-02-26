@@ -23,6 +23,9 @@ jobs:
           script_stop: true
           script: |
             set -euo pipefail
+            die() { echo "❌ $1"; exit 1; }
+            run() { echo "▶ $*"; "$@"; }
+            trap 'rc=$?; if [ $rc -ne 0 ]; then echo "❌ Script exiting with code=$rc at line $LINENO"; fi' EXIT
             trap 'echo "❌ FAIL at line $LINENO: $BASH_COMMAND (exit=$?)"' ERR
 
             echo "SHELL=$SHELL"
@@ -104,6 +107,59 @@ jobs:
 
             trap 'flock -u 9 || true; rm -f "$LOCK_FILE" || true' EXIT
             echo "✅ Lock acquired: $LOCK_FILE"
+
+            echo "================ DB DIAGNOSTICS ================"
+            run date
+            run whoami
+            run pwd
+
+            echo "---- Docker overview (top containers) ----"
+            run docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' | sed -n '1,40p'
+
+            echo "---- MAIN DB container check ----"
+            echo "MAIN_DB_CONTAINER=$MAIN_DB_CONTAINER"
+            MAIN_CID="$(docker ps -qf "name=^${MAIN_DB_CONTAINER}$" || true)"
+            echo "MAIN_CID=$MAIN_CID"
+            [ -n "$MAIN_CID" ] || die "Main DB container not found or not running: $MAIN_DB_CONTAINER"
+
+            echo "Main DB inspect:"
+            run docker inspect "$MAIN_CID" --format 'Name={{.Name}} Image={{.Config.Image}} State={{.State.Status}} StartedAt={{.State.StartedAt}}'
+
+            echo "Main DB readiness:"
+            run docker exec "$MAIN_CID" sh -lc 'pg_isready -U "$PGUSER" -d "$PGDATABASE" -h 127.0.0.1 || pg_isready -U "$PGUSER" -d "$PGDATABASE" || true'
+
+            echo "Main DB can connect?"
+            run docker exec "$MAIN_CID" sh -lc 'psql -U "$PGUSER" -d "$PGDATABASE" -c "select now() as now, current_database() as db, current_user as usr;"'
+
+            echo "Main DB tables count (sanity):"
+            run docker exec "$MAIN_CID" sh -lc 'psql -U "$PGUSER" -d "$PGDATABASE" -tAc "select count(*) from pg_tables where schemaname not in (''pg_catalog'',''information_schema'');"'
+
+            echo "---- DUMP file check ----"
+            echo "DUMP path=$DUMP"
+            [ -f "$DUMP" ] || die "Dump file does not exist: $DUMP"
+            [ -s "$DUMP" ] || die "Dump file is empty (0 bytes): $DUMP"
+            run ls -lah "$DUMP"
+            run stat "$DUMP" || true
+
+            echo "Try to read dump header (pg_restore -l):"
+            run docker run --rm -v "$DUMP:/dump.dump:ro" postgres:17-alpine sh -lc 'pg_restore -l /dump.dump | head -n 30'
+
+            echo "---- PR DB container check ----"
+            echo "Expected PR project: $PROJECT"
+            run docker ps -a --filter "label=com.docker.compose.project=$PROJECT" --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
+
+            DB_CID_DBG="$(docker ps -q --filter "label=com.docker.compose.project=$PROJECT" --filter "label=com.docker.compose.service=db" | head -n1 || true)"
+            echo "DB_CID(from labels)=$DB_CID_DBG"
+            if [ -n "$DB_CID_DBG" ]; then
+              echo "PR DB readiness:"
+              run docker exec "$DB_CID_DBG" sh -lc 'pg_isready -U "$PGUSER" -d "$PGDATABASE" -h 127.0.0.1 || pg_isready -U "$PGUSER" -d "$PGDATABASE" || true'
+              echo "PR DB tables BEFORE restore:"
+              run docker exec "$DB_CID_DBG" sh -lc 'psql -U "$PGUSER" -d "$PGDATABASE" -tAc "select count(*) from pg_tables where schemaname not in (''pg_catalog'',''information_schema'');"' || true
+            else
+              echo "⚠️  PR DB container not found yet (maybe compose up is later)."
+            fi
+
+            echo "================ END DB DIAGNOSTICS ================"
 
             NEED_DUMP=true
             if [ -f "$DUMP" ]; then
