@@ -89,6 +89,7 @@ jobs:
 
             echo "STEP: prepare dump dir: $DUMP_DIR"
             mkdir -p "$DUMP_DIR"
+
             # lock using flock (safe with set -e)
             LOCK_FILE="/tmp/yardena_dump.lock"
             echo "STEP: acquire lock (flock, 120s): $LOCK_FILE"
@@ -132,7 +133,8 @@ jobs:
             run docker exec "$MAIN_CID" psql -U "$PGUSER" -d "$PGDATABASE" -c "select now() as now, current_database() as db, current_user as usr;" || true
 
             echo "Main DB tables count (sanity):"
-            run docker exec "$MAIN_CID" sh -lc 'psql -U "$PGUSER" -d "$PGDATABASE" -tAc "select count(*) from pg_tables where schemaname not in (''pg_catalog'',''information_schema'');"'
+            run docker exec "$MAIN_CID" psql -U "$PGUSER" -d "$PGDATABASE" -tAc \
+              "select count(*) from pg_tables where schemaname not in ('pg_catalog','information_schema');" || true
 
             echo "---- DUMP file check ----"
             echo "DUMP path=$DUMP"
