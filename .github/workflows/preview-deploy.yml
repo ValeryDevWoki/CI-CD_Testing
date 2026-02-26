@@ -154,7 +154,7 @@ jobs:
               echo "PR DB readiness:"
               run docker exec "$DB_CID_DBG" pg_isready -U "$PGUSER" -d "$PGDATABASE" -h 127.0.0.1 || true
               echo "PR DB tables BEFORE restore:"
-              run docker exec "$DB_CID_DBG" sh -lc 'psql -U "$PGUSER" -d "$PGDATABASE" -tAc "select count(*) from pg_tables where schemaname not in (''pg_catalog'',''information_schema'');"' || true
+              run docker exec "$DB_CID_DBG" psql -U "$PGUSER" -d "$PGDATABASE" -tAc "select count(*) from pg_tables where schemaname not in ('pg_catalog','information_schema');" || true
             else
               echo "⚠️  PR DB container not found yet (maybe compose up is later)."
             fi
