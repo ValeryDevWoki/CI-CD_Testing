@@ -115,9 +115,6 @@ export async function deleteUser(userId) {
 /* =========================
    COMPANY DAILY LIMITS
    ========================= */
-// These functions assume the backend now handles daily limits for the company
-// as an array of objects, e.g.,
-// [ { day_name: "Sunday", max_hours: 8 }, { day_name: "Monday", max_hours: 9 }, ... ]
 
 export async function fetchCompanyDailyLimits() {
     const res = await fetch(`${API_BASE}/api/company-daily-limits`, { credentials: 'include' });
@@ -137,9 +134,6 @@ export async function updateCompanyDailyLimits(limits) {
 /* =========================
    EMPLOYEE DAILY LIMITS
    ========================= */
-// For each employee, the daily limit endpoint returns an array like:
-// [ { day_name: "Sunday", max_hours: 8 }, { day_name: "Monday", max_hours: 9 }, ... ]
-// and the update endpoint accepts a similar array.
 
 export async function fetchEmployeeDailyLimits(userId) {
     const res = await fetch(`${API_BASE}/api/employee-daily-limits/${userId}`, { credentials: 'include' });
@@ -187,15 +181,13 @@ export async function logout() {
    USER PERMISSIONS / ROLE CHECKS
    ========================= */
 
-// fetchCurrentUser
-// backend: GET /api/me
 export async function fetchCurrentUser() {
     const res = await fetch(`${API_BASE}/api/me`, { credentials: 'include' });
     return handleResponse(res);
 }
 
 /* =========================
-   SHIFTS (SCHEDULE)
+   SHIFTS
    ========================= */
 
 export async function fetchSchedule(weekCode) {
@@ -213,8 +205,9 @@ export async function createShift(shiftData) {
     return handleResponse(res);
 }
 
-export async function updateShift(shiftId, shiftData) {
-    const res = await fetch(`${API_BASE}/api/shifts/${shiftId}`, {
+export async function updateShift(shiftData) {
+    if (!shiftData.id) throw new Error("updateShift requires an id");
+    const res = await fetch(`${API_BASE}/api/shifts/${shiftData.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(shiftData),
@@ -224,7 +217,12 @@ export async function updateShift(shiftId, shiftData) {
 }
 
 export async function deleteShift(shiftId) {
-    const res = await fetch(`${API_BASE}/api/shifts/${shiftId}`, {
+    // Guard: avoid calling /api/shifts/:id with non-numeric IDs like "static-123"
+    const idStr = String(shiftId ?? '');
+    if (!/^\d+$/.test(idStr)) {
+        return { skipped: true, reason: 'non-numeric shift id' };
+    }
+    const res = await fetch(`${API_BASE}/api/shifts/${idStr}`, {
         method: 'DELETE',
         credentials: 'include'
     });
@@ -232,18 +230,54 @@ export async function deleteShift(shiftId) {
 }
 
 /* =========================
-   SHIFT HISTORY
+   WANTED (Hourly)
    ========================= */
+export async function fetchWanted(weekCode) {
+    const res = await fetch(`${API_BASE}/api/wanted/${weekCode}`, { credentials: 'include' });
+    return handleResponse(res);
+}
 
-export async function fetchShiftHistory(shiftId) {
-    const res = await fetch(`${API_BASE}/api/shift-history/${shiftId}`, { credentials: 'include' });
+export async function updateWanted({ weekCode, dayName, hour, wantedCount }) {
+    const res = await fetch(`${API_BASE}/api/wanted`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ weekCode, dayName, hour, wantedCount }),
+        credentials: 'include'
+    });
+    return handleResponse(res);
+}
+
+export async function copyWantedCoverage(fromWeek, toWeek) {
+    const res = await fetch(`${API_BASE}/api/wanted/copy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fromWeek, toWeek }),
+        credentials: 'include'
+    });
     return handleResponse(res);
 }
 
 /* =========================
-   SHIFT NOTES
+   WANTED TOTAL (Daily)
    ========================= */
+export async function fetchWantedTotal(weekCode) {
+    const res = await fetch(`${API_BASE}/api/wanted-total/${weekCode}`, { credentials: 'include' });
+    return handleResponse(res);
+}
 
+export async function updateWantedTotal({ weekCode, dayName, wantedCount }) {
+    const res = await fetch(`${API_BASE}/api/wanted-total`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ weekCode, dayName, wantedCount }),
+        credentials: 'include'
+    });
+    return handleResponse(res);
+}
+
+/* =========================
+   NOTES
+   ========================= */
 export async function fetchNotes() {
     const res = await fetch(`${API_BASE}/api/notes`, { credentials: 'include' });
     return handleResponse(res);
@@ -284,10 +318,6 @@ export async function fetchWeekStatus(weekCode) {
     return handleResponse(res);
 }
 
-/**
- * updateWeekStatus(weekCode, data)
- * data might be { is_published: true, changedShiftIds?: number[] }
- */
 export async function updateWeekStatus(weekCode, data) {
     const res = await fetch(`${API_BASE}/api/week-status/${weekCode}`, {
         method: 'PUT',
@@ -335,46 +365,9 @@ export async function deleteBlocker(id) {
 }
 
 /* =========================
-   EXTRA SHIFT HELPERS
-   ========================= */
-export async function fetchShiftsByWeek(weekCode) {
-    const res = await fetch(`${API_BASE}/api/shifts/${weekCode}`, { credentials: 'include' });
-    return handleResponse(res);
-}
-
-export async function markShiftsSent(shiftIds) {
-    const numericIds = shiftIds.map(id => parseInt(id, 10)).filter(x => !isNaN(x));
-    if (!numericIds.length) {
-        throw new Error("No valid numeric shift IDs to send.");
-    }
-
-    const res = await fetch(`${API_BASE}/api/shifts/mark-sent`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shiftIds: numericIds }),
-        credentials: 'include'
-    });
-    return handleResponse(res);
-}
-
-export async function markShiftsPublished(shiftIds) {
-    const numericIds = shiftIds.map(id => parseInt(id, 10)).filter(x => !isNaN(x));
-    if (!numericIds.length) {
-        throw new Error("No valid numeric shift IDs to publish.");
-    }
-
-    const res = await fetch(`${API_BASE}/api/shifts/mark-published`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shiftIds: numericIds }),
-        credentials: 'include'
-    });
-    return handleResponse(res);
-}
-
-/* =========================
    SHIFTS_STATIC
    ========================= */
+
 export async function fetchStaticShifts(activeOnly = false) {
     const url = `${API_BASE}/api/shifts-static?activeOnly=${activeOnly}`;
     const res = await fetch(url, { credentials: 'include' });
@@ -382,49 +375,23 @@ export async function fetchStaticShifts(activeOnly = false) {
 }
 
 export async function createStaticShift(data) {
-    const doReq = async (payload) => {
-        const res = await fetch(`${API_BASE}/api/shifts-static`, {
-            method:'POST',
-            headers: { 'Content-Type':'application/json' },
-            body: JSON.stringify(payload),
-            credentials: 'include'
-        });
-        return handleResponse(res);
-    };
-
-    try {
-        return await doReq(data);
-    } catch (err) {
-        const msg = String(err?.message || err || '');
-        if (data && Object.prototype.hasOwnProperty.call(data, 'start_week_code') && /start_week_code|column.*does not exist|unknown column/i.test(msg)) {
-            const { start_week_code, ...rest } = data;
-            return doReq(rest);
-        }
-        throw err;
-    }
+    const res = await fetch(`${API_BASE}/api/shifts-static`, {
+        method:'POST',
+        headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify(data),
+        credentials: 'include'
+    });
+    return handleResponse(res);
 }
 
 export async function updateStaticShift(id, data) {
-    const doReq = async (payload) => {
-        const res = await fetch(`${API_BASE}/api/shifts-static/${id}`, {
-            method:'PUT',
-            headers: { 'Content-Type':'application/json' },
-            body: JSON.stringify(payload),
-            credentials: 'include'
-        });
-        return handleResponse(res);
-    };
-
-    try {
-        return await doReq(data);
-    } catch (err) {
-        const msg = String(err?.message || err || '');
-        if (data && Object.prototype.hasOwnProperty.call(data, 'start_week_code') && /start_week_code|column.*does not exist|unknown column/i.test(msg)) {
-            const { start_week_code, ...rest } = data;
-            return doReq(rest);
-        }
-        throw err;
-    }
+    const res = await fetch(`${API_BASE}/api/shifts-static/${id}`, {
+        method:'PUT',
+        headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify(data),
+        credentials: 'include'
+    });
+    return handleResponse(res);
 }
 
 export async function deleteStaticShift(id) {
@@ -442,38 +409,6 @@ export async function applyStaticShifts({ currentWeek, nextWeek }) {
         body: JSON.stringify({ currentWeek, nextWeek }),
         credentials: 'include'
     });
-    return handleResponse(res);
-}
-
-/* =========================
-   WANTED (Coverage planning)
-   ========================= */
-
-export async function fetchWanted(weekCode) {
-    const res = await fetch(`${API_BASE}/api/wanted/${weekCode}`, { credentials: 'include' });
-    return handleResponse(res);
-}
-
-export async function updateWanted(weekCode, payload) {
-    const res = await fetch(`${API_BASE}/api/wanted/${weekCode}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        credentials: 'include'
-    });
-    return handleResponse(res);
-}
-
-export async function copyWantedCoverage({ fromWeek, toWeek }) {
-    const res = await fetch(`${API_BASE}/api/wanted/${fromWeek}/copy-to/${toWeek}`, {
-        method: 'POST',
-        credentials: 'include'
-    });
-    return handleResponse(res);
-}
-
-export async function fetchWantedTotal(weekCode) {
-    const res = await fetch(`${API_BASE}/api/wanted-total/${weekCode}`, { credentials: 'include' });
     return handleResponse(res);
 }
 
@@ -531,10 +466,6 @@ export async function createReminder(data) {
     return handleResponse(res);
 }
 
-/**
- * updateReminder(id, data)
- * data => { template_id?, send_at?, is_sent?, reminder_frequency?, is_active? }
- */
 export async function updateReminder(id, data) {
     if (!id) throw new Error("updateReminder requires an id");
     const res = await fetch(`${API_BASE}/api/reminders/${id}`, {
@@ -554,10 +485,6 @@ export async function deleteReminder(id) {
     return handleResponse(res);
 }
 
-/**
- * Manual send => pick a template, list of employees, etc.
- * POST /api/reminders/manual-send => { template_id, employeeIds }
- */
 export async function manualSendReminder(data) {
     const res = await fetch(`${API_BASE}/api/reminders/manual-send`, {
         method: 'POST',
@@ -606,58 +533,13 @@ export async function deleteDailyArrival(id) {
 }
 
 /* =========================
-   WEEKLY REGISTRATION (Opened/Registered/Sent)
+   WEEK LOCK
    ========================= */
-
-/**
- * GET /api/employee-submission-status/:weekCode
- */
-export async function fetchWeeklyStatus(weekCode) {
-    const url = `${API_BASE}/api/employee-submission-status/${weekCode}`;
-    const res = await fetch(url, { credentials: 'include' });
-    return handleResponse(res);
-}
-
-/**
- * PUT /api/employee-submission-status/:id
- * data => { opened_at?, registered_at?, submitted_at? }
- */
-export async function updateWeeklyStatus(id, data) {
-    const res = await fetch(`${API_BASE}/api/employee-submission-status/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-        credentials: 'include'
-    });
-    return handleResponse(res);
-}
-
-export async function fetchDailyArrivalByWeek(weekCode) {
-    const res = await fetch(`${API_BASE}/api/arrival/week/${weekCode}`, { credentials: 'include' });
-    return handleResponse(res);
-}
-
-export async function upsertDailyArrival({ employee_id, date, status, week_code }) {
-    const res = await fetch(`${API_BASE}/api/arrival`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ employee_id, date, status, week_code }),
-        credentials: 'include'
-    });
-    return handleResponse(res);
-}
-
-/* =========================
-   WEEK LOCK (NEW)
-   ========================= */
-
-// GET /api/week-lock/:weekCode => { locked: boolean, lock_date?: string }
 export async function fetchWeekLockStatus(weekCode) {
     const res = await fetch(`${API_BASE}/api/week-lock/${weekCode}`, { credentials: 'include' });
     return handleResponse(res);
 }
 
-// PUT /api/week-lock/:weekCode => { locked, lock_date }
 export async function updateWeekLock(weekCode, { locked, lock_date }) {
     const body = { locked, lock_date };
     const res = await fetch(`${API_BASE}/api/week-lock/${weekCode}`, {
@@ -669,7 +551,6 @@ export async function updateWeekLock(weekCode, { locked, lock_date }) {
     return handleResponse(res);
 }
 
-// POST /api/week-lock/:weekCode/notify => sends Template #1
 export async function sendRegistrationReminder(weekCode) {
     const res = await fetch(`${API_BASE}/api/week-lock/${weekCode}/notify`, {
         method: 'POST',
@@ -679,17 +560,13 @@ export async function sendRegistrationReminder(weekCode) {
 }
 
 /* =========================
-   ROLES (Role Management)
+   ROLES / PERMISSIONS
    ========================= */
-
-// GET all roles (admin only)
 export async function fetchRoles() {
     const res = await fetch(`${API_BASE}/api/roles`, { credentials: 'include' });
     return handleResponse(res);
 }
 
-// POST a new role (admin only)
-// roleData should be an object like: { role_name: "NewRole" }
 export async function createRole(roleData) {
     const res = await fetch(`${API_BASE}/api/roles`, {
         method: 'POST',
@@ -700,8 +577,6 @@ export async function createRole(roleData) {
     return handleResponse(res);
 }
 
-// PUT (update) an existing role (admin only)
-// roleId is the numeric ID and roleData is an object like: { role_name: "UpdatedName" }
 export async function updateRole(roleId, roleData) {
     const res = await fetch(`${API_BASE}/api/roles/${roleId}`, {
         method: 'PUT',
@@ -712,7 +587,6 @@ export async function updateRole(roleId, roleData) {
     return handleResponse(res);
 }
 
-// DELETE a role (admin only)
 export async function deleteRole(roleId) {
     const res = await fetch(`${API_BASE}/api/roles/${roleId}`, {
         method: 'DELETE',
@@ -721,16 +595,11 @@ export async function deleteRole(roleId) {
     return handleResponse(res);
 }
 
-/* =========================
-   ROLE PERMISSIONS
-   ========================= */
-// Update the permissions assigned to a role (admin only).
-// permissionIds should be an array of permission ID numbers.
 export async function updateRolePermissions(roleId, permissionIds) {
     const res = await fetch(`${API_BASE}/api/roles/${roleId}/permissions`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ permissionIds }), // key must be "permissionIds"
+        body: JSON.stringify({ permissionIds }),
         credentials: 'include'
     });
     return handleResponse(res);
@@ -741,7 +610,6 @@ export async function fetchAllPermissions() {
     return handleResponse(res);
 }
 
-// Logged-in user's permission names (for enabling/disabling UI controls)
 export async function fetchMyPermissions() {
     const res = await fetch(`${API_BASE}/api/my-permissions`, { credentials: 'include' });
     return handleResponse(res);
@@ -752,11 +620,9 @@ export async function fetchRolePermissions(roleId) {
     return handleResponse(res);
 }
 
-
-// =========================
-// SKILLS (Skills Management)
-// =========================
-
+/* =========================
+   SKILLS
+   ========================= */
 export async function fetchSkills() {
     const res = await fetch(`${API_BASE}/api/skills`, { credentials: 'include' });
     return handleResponse(res);
@@ -790,7 +656,9 @@ export async function deleteSkill(skillId) {
     return handleResponse(res);
 }
 
-// MANAGER CATEGORIES
+/* =========================
+   MANAGER CATEGORIES / MANAGERS / ASSIGNMENTS
+   ========================= */
 export async function fetchManagerCategories() {
     const res = await fetch(`${API_BASE}/api/manager-categories`, { credentials: 'include' });
     return handleResponse(res);
@@ -821,7 +689,6 @@ export async function deleteManagerCategory(id) {
     return handleResponse(res);
 }
 
-// MANAGERS CRUD
 export async function fetchManagers() {
     const res = await fetch(`${API_BASE}/api/managers`, { credentials: 'include' });
     return handleResponse(res);
@@ -852,7 +719,6 @@ export async function deleteManager(id) {
     return handleResponse(res);
 }
 
-// EMPLOYEE-MANAGER ASSIGNMENT
 export async function assignEmployeeManager({ employee_id, manager_id }) {
     const res = await fetch(`${API_BASE}/api/employee-manager`, {
         method: 'POST',
@@ -870,7 +736,6 @@ export async function unassignEmployeeManager(employee_id) {
     return handleResponse(res);
 }
 
-// USERS+MANAGERS: Get all employees with their manager + own manager info
 export async function fetchEmployeesWithManager() {
     const res = await fetch(`${API_BASE}/api/employees-with-manager`, { credentials: 'include' });
     return handleResponse(res);
