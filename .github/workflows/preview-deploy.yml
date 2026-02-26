@@ -126,10 +126,10 @@ jobs:
             run docker inspect "$MAIN_CID" --format 'Name={{.Name}} Image={{.Config.Image}} State={{.State.Status}} StartedAt={{.State.StartedAt}}'
 
             echo "Main DB readiness:"
-            run docker exec "$MAIN_CID" sh -lc 'pg_isready -U "$PGUSER" -d "$PGDATABASE" -h 127.0.0.1 || pg_isready -U "$PGUSER" -d "$PGDATABASE" || true'
+            run docker exec "$MAIN_CID" pg_isready -U "$PGUSER" -d "$PGDATABASE" -h 127.0.0.1 || true
 
             echo "Main DB can connect?"
-            run docker exec "$MAIN_CID" sh -lc 'psql -U "$PGUSER" -d "$PGDATABASE" -c "select now() as now, current_database() as db, current_user as usr;"'
+            run docker exec "$MAIN_CID" psql -U "$PGUSER" -d "$PGDATABASE" -c "select now() as now, current_database() as db, current_user as usr;" || true
 
             echo "Main DB tables count (sanity):"
             run docker exec "$MAIN_CID" sh -lc 'psql -U "$PGUSER" -d "$PGDATABASE" -tAc "select count(*) from pg_tables where schemaname not in (''pg_catalog'',''information_schema'');"'
@@ -152,7 +152,7 @@ jobs:
             echo "DB_CID(from labels)=$DB_CID_DBG"
             if [ -n "$DB_CID_DBG" ]; then
               echo "PR DB readiness:"
-              run docker exec "$DB_CID_DBG" sh -lc 'pg_isready -U "$PGUSER" -d "$PGDATABASE" -h 127.0.0.1 || pg_isready -U "$PGUSER" -d "$PGDATABASE" || true'
+              run docker exec "$DB_CID_DBG" pg_isready -U "$PGUSER" -d "$PGDATABASE" -h 127.0.0.1 || true
               echo "PR DB tables BEFORE restore:"
               run docker exec "$DB_CID_DBG" sh -lc 'psql -U "$PGUSER" -d "$PGDATABASE" -tAc "select count(*) from pg_tables where schemaname not in (''pg_catalog'',''information_schema'');"' || true
             else
