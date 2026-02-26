@@ -1,9 +1,27 @@
 // src/services/api.js
 
+// Resolve API base for both normal site and PR preview paths.
+//
+// Rules:
+// - Main site (/) should call /api/... (no prefix)
+// - Preview site (/pr/<n>/...) should call /pr/<n>/api/...
+// - Local dev should call http://localhost:3001/api/...
+function getPrPrefixFromPathname(pathname) {
+  // "/pr/14/admin-dashboard" => "/pr/14"
+  const m = String(pathname || '').match(/^\/pr\/\d+(?=\/|$)/);
+  return m ? m[0] : '';
+}
+
+// Optional override (can be absolute URL or a relative prefix like "/pr/14")
+const ENV_BASE = (process.env.REACT_APP_API_BASE || '').trim();
+
+const PR_PREFIX =
+  typeof window !== 'undefined' ? getPrPrefixFromPathname(window.location.pathname) : '';
+
 // Declare API_BASE only once at the top:
 const API_BASE =
-  process.env.REACT_APP_API_BASE ||
-  (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3001');
+  ENV_BASE ||
+  (process.env.NODE_ENV === 'production' ? PR_PREFIX : 'http://localhost:3001');
 
 
 /**
@@ -141,9 +159,48 @@ export async function updateEmployeeDailyLimits(userId, limits) {
 }
 
 /* =========================
-   SHIFTS
+   LOGIN / AUTH
    ========================= */
-export async function fetchShifts(weekCode) {
+
+export async function login(email, password) {
+    const res = await fetch(`${API_BASE}/api/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+        credentials: 'include'
+    });
+    return handleResponse(res);
+}
+
+export async function checkAuth() {
+    const res = await fetch(`${API_BASE}/api/check-auth`, { credentials: 'include' });
+    return handleResponse(res);
+}
+
+export async function logout() {
+    const res = await fetch(`${API_BASE}/api/logout`, {
+        method: 'POST',
+        credentials: 'include'
+    });
+    return handleResponse(res);
+}
+
+/* =========================
+   USER PERMISSIONS / ROLE CHECKS
+   ========================= */
+
+// fetchCurrentUser
+// backend: GET /api/me
+export async function fetchCurrentUser() {
+    const res = await fetch(`${API_BASE}/api/me`, { credentials: 'include' });
+    return handleResponse(res);
+}
+
+/* =========================
+   SHIFTS (SCHEDULE)
+   ========================= */
+
+export async function fetchSchedule(weekCode) {
     const res = await fetch(`${API_BASE}/api/shifts/${weekCode}`, { credentials: 'include' });
     return handleResponse(res);
 }
@@ -151,17 +208,15 @@ export async function fetchShifts(weekCode) {
 export async function createShift(shiftData) {
     const res = await fetch(`${API_BASE}/api/shifts`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(shiftData),
         credentials: 'include'
     });
     return handleResponse(res);
 }
 
-
-export async function updateShift(shiftData) {
-    if (!shiftData.id) throw new Error("updateShift requires an id");
-    const res = await fetch(`${API_BASE}/api/shifts/${shiftData.id}`, {
+export async function updateShift(shiftId, shiftData) {
+    const res = await fetch(`${API_BASE}/api/shifts/${shiftId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(shiftData),
@@ -171,12 +226,7 @@ export async function updateShift(shiftData) {
 }
 
 export async function deleteShift(shiftId) {
-    // Guard: avoid calling /api/shifts/:id with non-numeric IDs like "static-123"
-    const idStr = String(shiftId ?? '');
-    if (!/^\d+$/.test(idStr)) {
-        return { skipped: true, reason: 'non-numeric shift id' };
-    }
-    const res = await fetch(`${API_BASE}/api/shifts/${idStr}`, {
+    const res = await fetch(`${API_BASE}/api/shifts/${shiftId}`, {
         method: 'DELETE',
         credentials: 'include'
     });
@@ -184,54 +234,18 @@ export async function deleteShift(shiftId) {
 }
 
 /* =========================
-   WANTED (Hourly)
+   SHIFT HISTORY
    ========================= */
-export async function fetchWanted(weekCode) {
-    const res = await fetch(`${API_BASE}/api/wanted/${weekCode}`, { credentials: 'include' });
-    return handleResponse(res);
-}
 
-export async function updateWanted({ weekCode, dayName, hour, wantedCount }) {
-    const res = await fetch(`${API_BASE}/api/wanted`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ weekCode, dayName, hour, wantedCount }),
-        credentials: 'include'
-    });
-    return handleResponse(res);
-}
-
-export async function copyWantedCoverage(fromWeek, toWeek) {
-    const res = await fetch(`${API_BASE}/api/wanted/copy`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fromWeek, toWeek }),
-        credentials: 'include'
-    });
+export async function fetchShiftHistory(shiftId) {
+    const res = await fetch(`${API_BASE}/api/shift-history/${shiftId}`, { credentials: 'include' });
     return handleResponse(res);
 }
 
 /* =========================
-   WANTED TOTAL (Daily)
+   SHIFT NOTES
    ========================= */
-export async function fetchWantedTotal(weekCode) {
-    const res = await fetch(`${API_BASE}/api/wanted-total/${weekCode}`, { credentials: 'include' });
-    return handleResponse(res);
-}
 
-export async function updateWantedTotal({ weekCode, dayName, wantedCount }) {
-    const res = await fetch(`${API_BASE}/api/wanted-total`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ weekCode, dayName, wantedCount }),
-        credentials: 'include'
-    });
-    return handleResponse(res);
-}
-
-/* =========================
-   NOTES
-   ========================= */
 export async function fetchNotes() {
     const res = await fetch(`${API_BASE}/api/notes`, { credentials: 'include' });
     return handleResponse(res);
