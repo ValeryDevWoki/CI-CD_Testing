@@ -1,173 +1,211 @@
-name: Preview Deploy
+name: Preview Deploy (PR -> dev)
 
 on:
-  push:
-    branches:
-      - dev
   pull_request:
-    branches:
-      - dev
+    branches: ["dev"]
     types: [opened, synchronize, reopened]
 
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
-set -euo pipefail
-die() { echo "❌ $1"; exit 1; }
-run() { echo "▶ $*"; "$@"; }
+jobs:
+  deploy_preview:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy PR preview over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: 22
+          script_stop: true
+          script: |
+            set -euo pipefail
+            die() { echo "❌ $1"; exit 1; }
+            run() { echo "▶ $*"; "$@"; }
 
-# show failing command on errors
-trap 'echo "❌ FAIL at line $LINENO: $BASH_COMMAND (exit=$?)"' ERR
+            # show failing command on errors
+            trap 'echo "❌ FAIL at line $LINENO: $BASH_COMMAND (exit=$?)"' ERR
 
-echo "SHELL=$SHELL"
-echo "BASH_VERSION=${BASH_VERSION:-none}"
-echo "0=$0"
+            echo "SHELL=$SHELL"
+            echo "BASH_VERSION=${BASH_VERSION:-none}"
+            echo "0=$0"
 
-PR_NUMBER="${PR_NUMBER:-16}"
-PR_SHA="${PR_SHA:-542f9569afcf99a32fe433fef12cdda37eb85849}"
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+            PR_SHA="${{ github.event.pull_request.head.sha }}"
 
-PREVIEW_BASE_HOST="linuxtest2.woki.co.il"
-PR_PATH="/pr/${PR_NUMBER}"
+            PREVIEW_BASE_HOST="linuxtest2.woki.co.il"
+            PR_PATH="/pr/${PR_NUMBER}"
 
-APP_DIR="/opt/apps/yardena-previews/pr-${PR_NUMBER}"
-REPO_SSH="git@github.com:ValeryDevWoki/CI-CD_Testing.git"
-PROJECT="yardena-pr-${PR_NUMBER}"
+            APP_DIR="/opt/apps/yardena-previews/pr-${PR_NUMBER}"
+            REPO_SSH="git@github.com:ValeryDevWoki/CI-CD_Testing.git"
+            PROJECT="yardena-pr-${PR_NUMBER}"
 
-MAIN_DB_CONTAINER="yardena-db-1"
-PGUSER="yardena"
-PGDATABASE="yardena_test"
+            MAIN_DB_CONTAINER="yardena-db-1"
+            PGUSER="yardena"
+            PGDATABASE="yardena_test"
 
-DUMP_DIR="$APP_DIR/.cache/db-dumps"
-DUMP_FILE="$DUMP_DIR/latest.dump"
-LOCK_FILE="/tmp/yardena_dump.lock"
-DUMP_MAX_AGE_MINUTES=60
+            echo "ENV CHECK: PR_NUMBER=$PR_NUMBER PREVIEW_BASE_HOST=$PREVIEW_BASE_HOST PR_PATH=$PR_PATH"
+            echo "APP_DIR=$APP_DIR PROJECT=$PROJECT"
 
-COMPOSE_FILE="$APP_DIR/deploy/docker-compose.preview.yml"
+            echo "STEP: check docker access"
+            docker ps >/dev/null
 
-echo "ENV CHECK: PR_NUMBER=$PR_NUMBER PREVIEW_BASE_HOST=$PREVIEW_BASE_HOST PR_PATH=$PR_PATH"
-echo "APP_DIR=$APP_DIR PROJECT=$PROJECT"
-echo "COMPOSE_FILE=$COMPOSE_FILE"
+            echo "STEP: prepare APP_DIR"
+            mkdir -p "$APP_DIR"
 
-echo "STEP: check docker access"
-docker ps >/dev/null
+            if [ ! -d "$APP_DIR/.git" ]; then
+              echo "STEP: clone repo"
+              git clone "$REPO_SSH" "$APP_DIR"
+            fi
 
-echo "STEP: prepare APP_DIR"
-mkdir -p "$APP_DIR"
+            echo "STEP: checkout PR SHA"
+            cd "$APP_DIR"
+            git fetch --all
+            git reset --hard "$PR_SHA"
 
-if [ ! -d "$APP_DIR/.git" ]; then
-  echo "STEP: clone repo"
-  git clone "$REPO_SSH" "$APP_DIR"
-fi
+            # backend.env copy
+            if [ ! -f "$APP_DIR/deploy/backend.env" ]; then
+              if [ -f "/opt/apps/yardena/deploy/backend.env" ]; then
+                cp /opt/apps/yardena/deploy/backend.env "$APP_DIR/deploy/backend.env"
+              else
+                die "Missing $APP_DIR/deploy/backend.env and no fallback /opt/apps/yardena/deploy/backend.env"
+              fi
+            fi
 
-echo "STEP: checkout PR SHA"
-cd "$APP_DIR"
-git fetch --all
-git reset --hard "$PR_SHA"
+            export PR_NUMBER="$PR_NUMBER"
+            export PREVIEW_BASE_HOST="$PREVIEW_BASE_HOST"
+            export PR_PATH="$PR_PATH"
 
-# backend.env copy
-if [ ! -f "$APP_DIR/deploy/backend.env" ]; then
-  if [ -f "/opt/apps/yardena/deploy/backend.env" ]; then
-    echo "STEP: copy backend.env from main"
-    cp /opt/apps/yardena/deploy/backend.env "$APP_DIR/deploy/backend.env"
-  else
-    die "Missing deploy/backend.env and /opt/apps/yardena/deploy/backend.env not found"
-  fi
-fi
+            docker network create traefik_preview_public >/dev/null 2>&1 || true
 
-echo "STEP: prepare dump dir: $DUMP_DIR"
-mkdir -p "$DUMP_DIR"
+            # ---------------- DB snapshot (on-demand with cache) ----------------
+            DUMP_DIR="$APP_DIR/.cache/db-dumps"
+            DUMP="$DUMP_DIR/latest.dump"
+            MAX_AGE_MIN=60
 
-echo "STEP: acquire lock (flock, 120s): $LOCK_FILE"
-(
-  flock -w 120 9 || die "Could not acquire lock in time: $LOCK_FILE"
-  echo "✅ Lock acquired: $LOCK_FILE"
+            echo "STEP: prepare dump dir: $DUMP_DIR"
+            mkdir -p "$DUMP_DIR"
 
-  echo "================ DB DIAGNOSTICS (pre-up) ================"
-  run date
-  run whoami
-  run pwd
+            # lock using flock (safe with set -e)
+            LOCK_FILE="/tmp/yardena_dump.lock"
+            echo "STEP: acquire lock (flock, 120s): $LOCK_FILE"
 
-  echo "---- Docker overview (top containers) ----"
-  run docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}" || true
+            if ! { exec 9>"$LOCK_FILE"; }; then
+              die "Cannot open lock file for writing: $LOCK_FILE"
+            fi
 
-  echo "---- MAIN DB container check ----"
-  echo "MAIN_DB_CONTAINER=$MAIN_DB_CONTAINER"
-  MAIN_CID="$(docker ps -qf "name=^${MAIN_DB_CONTAINER}$" | head -n1 || true)"
-  [ -n "${MAIN_CID:-}" ] || die "Main DB container not running: $MAIN_DB_CONTAINER"
-  echo "MAIN_CID=$MAIN_CID"
+            if ! flock -w 120 9; then
+              die "Could not acquire dump lock in 120s: $LOCK_FILE"
+            fi
 
-  echo "Main DB readiness:"
-  run docker exec "$MAIN_CID" pg_isready -U "$PGUSER" -d "$PGDATABASE" -h 127.0.0.1 || true
+            trap 'flock -u 9 || true; rm -f "$LOCK_FILE" || true' EXIT
+            echo "✅ Lock acquired: $LOCK_FILE"
 
-  echo "Main DB can connect?"
-  run docker exec "$MAIN_CID" psql -U "$PGUSER" -d "$PGDATABASE" -c \
-    "select now() as now, current_database() as db, current_user as usr;" || true
+            echo "================ DB DIAGNOSTICS (pre-up) ================"
+            run date || true
+            run whoami || true
+            run pwd || true
 
-  echo "Main DB tables count (sanity):"
-  run docker exec "$MAIN_CID" psql -U "$PGUSER" -d "$PGDATABASE" -tAc \
-    "select count(*) from pg_tables where schemaname not in ('pg_catalog','information_schema');" || true
+            echo "---- Docker overview (top containers) ----"
+            run docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' | sed -n '1,40p' || true
 
-  echo "================ END DIAGNOSTICS (pre-up) ================"
+            echo "---- MAIN DB container check ----"
+            echo "MAIN_DB_CONTAINER=$MAIN_DB_CONTAINER"
+            MAIN_CID="$(docker ps -qf "name=^${MAIN_DB_CONTAINER}$" || true)"
+            echo "MAIN_CID=${MAIN_CID:-<empty>}"
+            [ -n "${MAIN_CID:-}" ] || die "Main DB container not found or not running: $MAIN_DB_CONTAINER"
 
-  # Decide whether to use cached dump
-  NEED_DUMP=1
-  if [ -f "$DUMP_FILE" ]; then
-    # file age in minutes
-    AGE_MIN=$(( ( $(date +%s) - $(stat -c %Y "$DUMP_FILE") ) / 60 ))
-    echo "Dump cache exists: $DUMP_FILE (age=${AGE_MIN}m)"
-    if [ "$AGE_MIN" -lt "$DUMP_MAX_AGE_MINUTES" ]; then
-      NEED_DUMP=0
-      echo "✅ Using cached dump (age < ${DUMP_MAX_AGE_MINUTES}m)"
-    fi
-  fi
+            echo "Main DB readiness:"
+            run docker exec "$MAIN_CID" pg_isready -U "$PGUSER" -d "$PGDATABASE" -h 127.0.0.1 || true
 
-  if [ "$NEED_DUMP" -eq 1 ]; then
-    echo "STEP: create fresh dump from main DB -> $DUMP_FILE"
-    TMP_DUMP="${DUMP_FILE}.tmp"
-    rm -f "$TMP_DUMP"
-    run docker exec "$MAIN_CID" pg_dump -U "$PGUSER" -d "$PGDATABASE" -Fc > "$TMP_DUMP"
-    mv "$TMP_DUMP" "$DUMP_FILE"
-    echo "✅ Dump saved: $DUMP_FILE"
-    run ls -lah "$DUMP_FILE" || true
-  fi
-) 9>"$LOCK_FILE"
+            echo "Main DB can connect?"
+            run docker exec "$MAIN_CID" psql -U "$PGUSER" -d "$PGDATABASE" -c "select now() as now, current_database() as db, current_user as usr;" || true
 
-echo "STEP: ensure compose file exists"
-[ -f "$COMPOSE_FILE" ] || die "Compose file not found: $COMPOSE_FILE"
+            echo "Main DB tables count (sanity):"
+            run docker exec "$MAIN_CID" psql -U "$PGUSER" -d "$PGDATABASE" -tAc \
+              "select count(*) from pg_tables where schemaname not in ('pg_catalog','information_schema');" || true
 
-echo "STEP: bring down preview stack and remove volumes"
-run docker compose -p "$PROJECT" -f "$COMPOSE_FILE" down -v --remove-orphans || true
+            NEED_DUMP=true
+            if [ -f "$DUMP" ]; then
+              TS="$(stat -c %Y "$DUMP" 2>/dev/null || echo 0)"
+              NOW="$(date +%s)"
+              AGE_MIN=$(( (NOW - TS) / 60 ))
+              if [ "$AGE_MIN" -lt "$MAX_AGE_MIN" ]; then
+                NEED_DUMP=false
+              fi
+            fi
 
-echo "STEP: build + up preview stack"
-run docker compose -p "$PROJECT" -f "$COMPOSE_FILE" up -d --build --force-recreate --remove-orphans
+            if $NEED_DUMP; then
+              echo "STEP: creating fresh dump (missing/older than ${MAX_AGE_MIN}m)"
+              docker exec "$MAIN_DB_CONTAINER" pg_dump -U "$PGUSER" -d "$PGDATABASE" -Fc > "$DUMP"
+              echo "Dump created: $(stat -c %s "$DUMP") bytes"
+            else
+              echo "STEP: using cached dump (fresh enough)"
+              echo "Dump size: $(stat -c %s "$DUMP") bytes"
+            fi
 
-echo "STEP: locate PR DB container id"
-PR_DB_CID="$(docker compose -p "$PROJECT" -f "$COMPOSE_FILE" ps -q db | head -n1 || true)"
-[ -n "${PR_DB_CID:-}" ] || die "Could not find PR DB container id (service: db)"
-echo "PR_DB_CID=$PR_DB_CID"
+            echo "Try to read dump header (pg_restore -l):"
+            run docker run --rm -v "$DUMP:/dump.dump:ro" postgres:17-alpine sh -lc 'pg_restore -l /dump.dump | head -n 30' || true
+            echo "================ END DB DIAGNOSTICS (pre-up) ================"
 
-echo "STEP: wait for PR Postgres readiness (up to 120s)"
-for i in $(seq 1 120); do
-  if docker exec "$PR_DB_CID" pg_isready -U "$PGUSER" -d "$PGDATABASE" -h 127.0.0.1 >/dev/null 2>&1; then
-    echo "✅ PR Postgres is ready"
-    break
-  fi
-  if [ "$i" -eq 120 ]; then
-    echo "PR DB logs (last 200 lines):"
-    docker logs --tail 200 "$PR_DB_CID" || true
-    die "PR Postgres did not become ready in time"
-  fi
-  sleep 1
-done
+            # IMPORTANT: recreate PR DB volume to avoid restore conflicts
+            echo "STEP: down -v (fresh db volume)"
+            docker compose -p "$PROJECT" -f "$APP_DIR/deploy/docker-compose.preview.yml" down -v --remove-orphans || true
 
-echo "STEP: restore dump into PR DB (clean/if-exists/no-owner/no-privileges)"
-[ -f "$DUMP_FILE" ] || die "Dump file missing: $DUMP_FILE"
+            echo "STEP: up (build + start)"
+            docker compose -p "$PROJECT" -f "$APP_DIR/deploy/docker-compose.preview.yml" up -d --build --force-recreate --remove-orphans
 
-# Use cat -> docker exec -i to feed dump into pg_restore
-cat "$DUMP_FILE" | docker exec -i "$PR_DB_CID" pg_restore \
-  -U "$PGUSER" -d "$PGDATABASE" \
-  --clean --if-exists --no-owner --no-privileges
+            echo "---- PR stack status (post-up) ----"
+            docker compose -p "$PROJECT" -f "$APP_DIR/deploy/docker-compose.preview.yml" ps || true
+            docker ps -a --filter "label=com.docker.compose.project=$PROJECT" --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' || true
 
-echo "✅ Restore done"
+            DB_CID="$(docker compose -p "$PROJECT" -f "$APP_DIR/deploy/docker-compose.preview.yml" ps -q db || true)"
+            echo "PR DB container: ${DB_CID:-<empty>}"
+            [ -n "${DB_CID:-}" ] || die "Could not resolve DB container id (service=db)."
 
-echo "STEP: print preview URL"
-echo "✅ Preview URL: https://${PREVIEW_BASE_HOST}${PR_PATH}/"
-echo "✅ API URL:     https://${PREVIEW_BASE_HOST}${PR_PATH}/api/"
+            echo "STEP: wait for postgres"
+            READY=false
+            for i in {1..90}; do
+              if docker exec "$DB_CID" pg_isready -U "$PGUSER" -d "$PGDATABASE" >/dev/null 2>&1; then
+                READY=true
+                break
+              fi
+              sleep 2
+            done
+
+            if [ "$READY" != "true" ]; then
+              echo "❌ Postgres not ready in time"
+              docker logs --tail=200 "$DB_CID" || true
+              exit 1
+            fi
+            echo "Postgres ready"
+
+            echo "PR DB tables BEFORE restore:"
+            run docker exec "$DB_CID" psql -U "$PGUSER" -d "$PGDATABASE" -tAc \
+              "select count(*) from pg_tables where schemaname not in ('pg_catalog','information_schema');" || true
+
+            echo "STEP: restore dump into fresh PR DB"
+            set +e
+            cat "$DUMP" | docker exec -i "$DB_CID" pg_restore \
+              -U "$PGUSER" -d "$PGDATABASE" \
+              --clean --if-exists \
+              --no-owner --no-privileges
+            RESTORE_RC=$?
+            set -e
+
+            if [ "$RESTORE_RC" -ne 0 ]; then
+              echo "❌ pg_restore failed with code $RESTORE_RC"
+              echo "---- Last DB logs ----"
+              docker logs --tail=200 "$DB_CID" || true
+              exit 1
+            fi
+
+            echo "PR DB tables AFTER restore:"
+            run docker exec "$DB_CID" psql -U "$PGUSER" -d "$PGDATABASE" -tAc \
+              "select count(*) from pg_tables where schemaname not in ('pg_catalog','information_schema');" || true
+
+            echo "✅ Restore done"
+            echo "✅ Preview URL: https://${PREVIEW_BASE_HOST}${PR_PATH}/"
