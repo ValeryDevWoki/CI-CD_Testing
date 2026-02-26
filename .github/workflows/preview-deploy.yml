@@ -86,18 +86,24 @@ jobs:
 
             echo "STEP: prepare dump dir: $DUMP_DIR"
             mkdir -p "$DUMP_DIR"
-            # lock using flock (reliable, avoids stale lock directories)
+            # lock using flock (safe with set -e)
             LOCK_FILE="/tmp/yardena_dump.lock"
             echo "STEP: acquire lock (flock, 120s): $LOCK_FILE"
 
-            exec 9>"$LOCK_FILE"
+            # exec can fail -> must be wrapped, otherwise set -e kills the script
+            if ! { exec 9>"$LOCK_FILE"; }; then
+              echo "❌ Cannot open lock file for writing: $LOCK_FILE"
+              ls -ld /tmp || true
+              exit 1
+            fi
+
             if ! flock -w 120 9; then
               echo "❌ Could not acquire dump lock in 120s: $LOCK_FILE"
               exit 1
             fi
 
-            # release lock on exit
             trap 'flock -u 9 || true; rm -f "$LOCK_FILE" || true' EXIT
+            echo "✅ Lock acquired: $LOCK_FILE"
 
             NEED_DUMP=true
             if [ -f "$DUMP" ]; then
