@@ -30,6 +30,7 @@ jobs:
             fi
 
             docker compose -p "$PROJECT" -f "$APP_DIR/deploy/docker-compose.preview.yml" down -v --remove-orphans || true
+            rm -f /tmp/yardena_dump.lock || true
             rm -rf "$APP_DIR"
 
             echo "✅ Preview cleaned"

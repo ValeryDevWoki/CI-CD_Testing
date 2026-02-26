@@ -23,6 +23,10 @@ jobs:
           script_stop: true
           script: |
             set -euo pipefail
+            die() { echo "❌ $1"; exit 1; }
+            run() { echo "▶ $*"; "$@"; }
+
+            # show failing command on errors
             trap 'echo "❌ FAIL at line $LINENO: $BASH_COMMAND (exit=$?)"' ERR
 
             echo "SHELL=$SHELL"
@@ -67,8 +71,7 @@ jobs:
               if [ -f "/opt/apps/yardena/deploy/backend.env" ]; then
                 cp /opt/apps/yardena/deploy/backend.env "$APP_DIR/deploy/backend.env"
               else
-                echo "❌ Missing $APP_DIR/deploy/backend.env and no fallback /opt/apps/yardena/deploy/backend.env" >&2
-                exit 1
+                die "Missing $APP_DIR/deploy/backend.env and no fallback /opt/apps/yardena/deploy/backend.env"
               fi
             fi
 
@@ -79,7 +82,6 @@ jobs:
             docker network create traefik_preview_public >/dev/null 2>&1 || true
 
             # ---------------- DB snapshot (on-demand with cache) ----------------
-            # store dump cache inside PR directory to avoid permission issues
             DUMP_DIR="$APP_DIR/.cache/db-dumps"
             DUMP="$DUMP_DIR/latest.dump"
             MAX_AGE_MIN=60
@@ -87,16 +89,44 @@ jobs:
             echo "STEP: prepare dump dir: $DUMP_DIR"
             mkdir -p "$DUMP_DIR"
 
-            # lock using mkdir (reliable in ssh-action)
-            LOCK_DIR="/tmp/yardena_dump.lockdir"
-            echo "STEP: acquire lock: $LOCK_DIR"
-            for i in {1..120}; do
-              if mkdir "$LOCK_DIR" 2>/dev/null; then
-                break
-              fi
-              sleep 1
-            done
-            trap 'rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT
+            # lock using flock (safe with set -e)
+            LOCK_FILE="/tmp/yardena_dump.lock"
+            echo "STEP: acquire lock (flock, 120s): $LOCK_FILE"
+
+            if ! { exec 9>"$LOCK_FILE"; }; then
+              die "Cannot open lock file for writing: $LOCK_FILE"
+            fi
+
+            if ! flock -w 120 9; then
+              die "Could not acquire dump lock in 120s: $LOCK_FILE"
+            fi
+
+            trap 'flock -u 9 || true; rm -f "$LOCK_FILE" || true' EXIT
+            echo "✅ Lock acquired: $LOCK_FILE"
+
+            echo "================ DB DIAGNOSTICS (pre-up) ================"
+            run date || true
+            run whoami || true
+            run pwd || true
+
+            echo "---- Docker overview (top containers) ----"
+            run docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' | sed -n '1,40p' || true
+
+            echo "---- MAIN DB container check ----"
+            echo "MAIN_DB_CONTAINER=$MAIN_DB_CONTAINER"
+            MAIN_CID="$(docker ps -qf "name=^${MAIN_DB_CONTAINER}$" || true)"
+            echo "MAIN_CID=${MAIN_CID:-<empty>}"
+            [ -n "${MAIN_CID:-}" ] || die "Main DB container not found or not running: $MAIN_DB_CONTAINER"
+
+            echo "Main DB readiness:"
+            run docker exec "$MAIN_CID" pg_isready -U "$PGUSER" -d "$PGDATABASE" -h 127.0.0.1 || true
+
+            echo "Main DB can connect?"
+            run docker exec "$MAIN_CID" psql -U "$PGUSER" -d "$PGDATABASE" -c "select now() as now, current_database() as db, current_user as usr;" || true
+
+            echo "Main DB tables count (sanity):"
+            run docker exec "$MAIN_CID" psql -U "$PGUSER" -d "$PGDATABASE" -tAc \
+              "select count(*) from pg_tables where schemaname not in ('pg_catalog','information_schema');" || true
 
             NEED_DUMP=true
             if [ -f "$DUMP" ]; then
@@ -116,7 +146,10 @@ jobs:
               echo "STEP: using cached dump (fresh enough)"
               echo "Dump size: $(stat -c %s "$DUMP") bytes"
             fi
-            # ---------------------------------------------------------------
+
+            echo "Try to read dump header (pg_restore -l):"
+            run docker run --rm -v "$DUMP:/dump.dump:ro" postgres:17-alpine sh -lc 'pg_restore -l /dump.dump | head -n 30' || true
+            echo "================ END DB DIAGNOSTICS (pre-up) ================"
 
             # IMPORTANT: recreate PR DB volume to avoid restore conflicts
             echo "STEP: down -v (fresh db volume)"
@@ -125,13 +158,13 @@ jobs:
             echo "STEP: up (build + start)"
             docker compose -p "$PROJECT" -f "$APP_DIR/deploy/docker-compose.preview.yml" up -d --build --force-recreate --remove-orphans
 
-            DB_CID="$(docker compose -p "$PROJECT" -f "$APP_DIR/deploy/docker-compose.preview.yml" ps -q db)"
-            if [ -z "${DB_CID:-}" ]; then
-              echo "❌ Could not resolve DB container id" >&2
-              docker compose -p "$PROJECT" -f "$APP_DIR/deploy/docker-compose.preview.yml" ps || true
-              exit 1
-            fi
-            echo "PR DB container: $DB_CID"
+            echo "---- PR stack status (post-up) ----"
+            docker compose -p "$PROJECT" -f "$APP_DIR/deploy/docker-compose.preview.yml" ps || true
+            docker ps -a --filter "label=com.docker.compose.project=$PROJECT" --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' || true
+
+            DB_CID="$(docker compose -p "$PROJECT" -f "$APP_DIR/deploy/docker-compose.preview.yml" ps -q db || true)"
+            echo "PR DB container: ${DB_CID:-<empty>}"
+            [ -n "${DB_CID:-}" ] || die "Could not resolve DB container id (service=db)."
 
             echo "STEP: wait for postgres"
             READY=false
@@ -150,6 +183,10 @@ jobs:
             fi
             echo "Postgres ready"
 
+            echo "PR DB tables BEFORE restore:"
+            run docker exec "$DB_CID" psql -U "$PGUSER" -d "$PGDATABASE" -tAc \
+              "select count(*) from pg_tables where schemaname not in ('pg_catalog','information_schema');" || true
+
             echo "STEP: restore dump into fresh PR DB"
             set +e
             cat "$DUMP" | docker exec -i "$DB_CID" pg_restore \
@@ -165,6 +202,10 @@ jobs:
               docker logs --tail=200 "$DB_CID" || true
               exit 1
             fi
+
+            echo "PR DB tables AFTER restore:"
+            run docker exec "$DB_CID" psql -U "$PGUSER" -d "$PGDATABASE" -tAc \
+              "select count(*) from pg_tables where schemaname not in ('pg_catalog','information_schema');" || true
 
             echo "✅ Restore done"
             echo "✅ Preview URL: https://${PREVIEW_BASE_HOST}${PR_PATH}/"
