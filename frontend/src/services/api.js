@@ -740,3 +740,12 @@ export async function fetchEmployeesWithManager() {
     const res = await fetch(`${API_BASE}/api/employees-with-manager`, { credentials: 'include' });
     return handleResponse(res);
 }
+
+/* =========================
+   COMPAT ALIASES
+   ========================= */
+
+// ✅ Fix build: some components import { fetchShifts } from '../services/api'
+export async function fetchShifts(weekCode) {
+  return fetchSchedule(weekCode);
+}
