@@ -1,24 +1,22 @@
 // src/services/api.js
 
-// Resolve API base for both normal site and PR preview paths.
-//
-// Rules:
-// - Main site (/) should call /api/... (no prefix)
-// - Preview site (/pr/<n>/...) should call /pr/<n>/api/...
-// - Local dev should call http://localhost:3001/api/...
 function getPrPrefixFromPathname(pathname) {
   // "/pr/14/admin-dashboard" => "/pr/14"
   const m = String(pathname || '').match(/^\/pr\/\d+(?=\/|$)/);
   return m ? m[0] : '';
 }
 
-// Optional override (can be absolute URL or a relative prefix like "/pr/14")
+// Optional override (absolute URL or relative prefix like "/pr/14")
 const ENV_BASE = (process.env.REACT_APP_API_BASE || '').trim();
 
+// Detect preview prefix at runtime
 const PR_PREFIX =
   typeof window !== 'undefined' ? getPrPrefixFromPathname(window.location.pathname) : '';
 
-// Declare API_BASE only once at the top:
+// Final API base:
+// - if REACT_APP_API_BASE is set -> use it
+// - else in production -> use "/pr/<n>" (or "" for main site)
+// - else (local dev) -> localhost backend
 const API_BASE =
   ENV_BASE ||
   (process.env.NODE_ENV === 'production' ? PR_PREFIX : 'http://localhost:3001');
@@ -448,6 +446,38 @@ export async function applyStaticShifts({ currentWeek, nextWeek }) {
 }
 
 /* =========================
+   WANTED (Coverage planning)
+   ========================= */
+
+export async function fetchWanted(weekCode) {
+    const res = await fetch(`${API_BASE}/api/wanted/${weekCode}`, { credentials: 'include' });
+    return handleResponse(res);
+}
+
+export async function updateWanted(weekCode, payload) {
+    const res = await fetch(`${API_BASE}/api/wanted/${weekCode}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        credentials: 'include'
+    });
+    return handleResponse(res);
+}
+
+export async function copyWantedCoverage({ fromWeek, toWeek }) {
+    const res = await fetch(`${API_BASE}/api/wanted/${fromWeek}/copy-to/${toWeek}`, {
+        method: 'POST',
+        credentials: 'include'
+    });
+    return handleResponse(res);
+}
+
+export async function fetchWantedTotal(weekCode) {
+    const res = await fetch(`${API_BASE}/api/wanted-total/${weekCode}`, { credentials: 'include' });
+    return handleResponse(res);
+}
+
+/* =========================
    TEMPLATES
    ========================= */
 export async function fetchTemplates() {
@@ -705,8 +735,6 @@ export async function updateRolePermissions(roleId, permissionIds) {
     });
     return handleResponse(res);
 }
-
-
 
 export async function fetchAllPermissions() {
     const res = await fetch(`${API_BASE}/api/permissions`, { credentials: 'include' });
